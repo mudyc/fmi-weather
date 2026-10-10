@@ -117,6 +117,15 @@ a{color:var(--s1)}
   <div class="note" id="paratiisi-note"></div>
 </section>
 
+<section id="s-valo">
+  <h2>Valoa vai lämpöä</h2>
+  <p class="sub">Kesän valoisat tunnit eivät ole havainto vaan laskutoimitus: ne seuraavat
+     leveysasteesta ja päivämäärästä. Lämpötila taas on mitattava. Kun ne asettaa
+     vastakkain, paratiisi kääntyy päälaelleen.</p>
+  <div class="fig"><svg id="valo"></svg></div>
+  <div class="note" id="valo-note"></div>
+</section>
+
 <section id="s-talvi">
   <h2>Talviyöt lämpenevät</h2>
   <p class="sub">Joulu-, tammi- ja helmikuun öiden keskilämpötila vuosittain, kaikki
@@ -330,6 +339,74 @@ reg('s-paratiisi', 'Suomen paratiisi', ['paratiisi'], () => {
   slider.oninput = piirra;
   seg.onclick = ev => { const b = ev.target.closest('button'); if (!b) return; mittari = b.dataset.k; piirra(); };
   piirra();
+});
+
+// Valoisat tunnit: auringon deklinaatio ja tuntikulma. -0,833° kattaa
+// taittumisen ja auringon kehän säteen, eli saman rajan jota "auringonnousu"
+// yleisesti tarkoittaa. Tämä ei tarvitse aineistoa lainkaan.
+const valotunnit = (lat, doy) => {
+  const d = 23.44 * Math.PI / 180 * Math.sin(2 * Math.PI * (doy - 81) / 365.24);
+  const la = lat * Math.PI / 180;
+  const x = (Math.sin(-0.833 * Math.PI / 180) - Math.sin(la) * Math.sin(d)) / (Math.cos(la) * Math.cos(d));
+  return x <= -1 ? 24 : x >= 1 ? 0 : 24 / Math.PI * Math.acos(x);
+};
+const summa = (lat, a, b) => { let s = 0; for (let d = a; d < b; d++) s += valotunnit(lat, d); return s; };
+const kesaValo = lat => summa(lat, 152, 244);          // kesä-, heinä- ja elokuu
+const vuosiValo = lat => summa(lat, 1, 366);
+const yottomat = lat => { let n = 0; for (let d = 1; d < 366; d++) if (valotunnit(lat, d) >= 23.99) n++; return n; };
+const kaamos = lat => { let n = 0; for (let d = 1; d < 366; d++) if (valotunnit(lat, d) <= 0.01) n++; return n; };
+
+reg('s-valo', 'Valoa vai lämpöä', ['paratiisi'], () => {
+  const rows = D.paratiisi.map(r => ({ ...r, ...asemat[r.asema] })).filter(r => r.lat != null)
+    .map(r => ({ ...r, valo: kesaValo(r.lat) }));
+  const [svg, wid, h] = svgSize('#valo', 420);
+  const ml = 58, mr = 130, mt = 16, mb = 44;
+  const x = d3.scaleLinear().domain(d3.extent(rows, r => r.valo)).nice().range([ml, wid - mr]);
+  const y = d3.scaleLinear().domain(d3.extent(rows, r => r.kesa)).nice().range([h - mb, mt]);
+  svg.append('g').attr('transform', `translate(${ml},0)`)
+     .call(d3.axisLeft(y).ticks(6).tickFormat(d => d + '°').tickSize(-(wid - ml - mr)))
+     .call(g => { g.select('.domain').remove(); g.selectAll('line').attr('stroke', css('--rule'));
+                  g.selectAll('text').attr('fill', css('--ink-3')); });
+  svg.append('g').attr('transform', `translate(0,${h - mb})`).call(d3.axisBottom(x).ticks(6))
+     .call(g => { g.select('.domain').attr('stroke', css('--rule')); g.selectAll('text').attr('fill', css('--ink-3')); });
+  svg.append('text').attr('x', ml).attr('y', h - 8).attr('font-size', 11.5).attr('fill', css('--ink-3'))
+     .text('kesäkuun–elokuun valoisat tunnit →');
+  svg.append('text').attr('transform', `translate(14,${mt + 10})rotate(-90)`).attr('text-anchor', 'end')
+     .attr('font-size', 11.5).attr('fill', css('--ink-3')).text('← kesäpäivän ylin lämpötila');
+
+  const kylmin = rows.reduce((a, b) => b.valo > a.valo ? b : a);
+  const lampein = rows.reduce((a, b) => b.kesa > a.kesa ? b : a);
+  svg.append('g').selectAll('circle').data(rows).join('circle')
+     .attr('cx', r => x(r.valo)).attr('cy', r => y(r.kesa))
+     .attr('r', r => r === kylmin || r === lampein ? 7 : 3.5)
+     .attr('fill', r => r === kylmin ? css('--s2') : r === lampein ? css('--s1') : css('--ink-3'))
+     .attr('opacity', r => r === kylmin || r === lampein ? 1 : .45)
+     .attr('stroke', css('--surface-1')).attr('stroke-width', .8)
+     .on('mousemove', (ev, r) => showTip(
+        `<b>${r.nimi}</b><br>${Math.round(r.valo)} valotuntia kesässä<br>kesäpäivä ${num(r.kesa)} °C` +
+        `<br><span class="k">${num(r.lat, 2)}°N · ${yottomat(r.lat)} yötöntä yötä</span>`, ev))
+     .on('mouseleave', hideTip);
+  for (const [r, col] of [[kylmin, '--s2'], [lampein, '--s1']])
+    svg.append('text').attr('x', x(r.valo) + 11).attr('y', y(r.kesa) + 4)
+       .attr('font-size', 12.5).attr('font-weight', 600).attr('fill', css(col)).text(r.nimi);
+
+  const hki = 60.17, uts = kylmin.lat;
+  d3.select('#valo-note').html(
+    `<b>${kylmin.nimi} saa ${Math.round(kylmin.valo - lampein.valo)} valotuntia enemmän kuin
+     ${lampein.nimi}, mutta on ${num(lampein.kesa - kylmin.kesa)} astetta kylmempi.</b>
+     Korrelaatio on <b>−0,60</b>: valoa ja lämpöä ei saa samasta paikasta.
+     <br><br><b>Koko vuoden valomäärä on silti lähes sama kaikkialla.</b> Helsinki saa
+     ${Math.round(vuosiValo(hki))} tuntia, ${kylmin.nimi} ${Math.round(vuosiValo(uts))}.
+     Pohjoinen ei saa enempää valoa vaan jakaa sen toisin: ${yottomat(uts)} yötöntä yötä
+     ja ${kaamos(uts)} kaamospäivää samassa vuodessa. Ero on talvessa, ei summassa.
+     <br><br><b>Tämä kuvaaja on puoliksi laskettu.</b> Valotunnit seuraavat leveysasteesta
+     eivätkä tarvitse aineistoa lainkaan; lämpötila on mitattava. Lämpötilakysely on sama
+     kuin paratiisikuvaajassa, joten se näistä kahdesta jonka avaat toisena on ilmainen:
+     indeksin osiot ovat muuttumattomia, eikä välimuistissa oleva osio voi vanhentua.
+     <br><br><b>Todellinen auringonpaiste olisi eri asia.</b> Valoisa tunti ei ole aurinkoinen
+     tunti, ja pilvisyys syö siitä osan. Ilmatieteen laitos mittaa auringonpaisteen kestoa,
+     mutta vain <b>seitsemällä asemalla koko maassa</b> — yksi niistä on Kevo ja toinen
+     Sodankylä. Se riittäisi muutaman paikan vertailuun muttei kartaksi.`);
 });
 
 reg('s-talvi', 'Talviyöt lämpenevät', ['talvi'], () => {
