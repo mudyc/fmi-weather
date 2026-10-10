@@ -33,6 +33,14 @@ function inFeature(x, y, geom) {
   return false;
 }
 
+/** Vuoden 10 päivän jakso, 01..37. Syklinen valitsin kuten kuukausi mutta
+ *  kolme kertaa tarkempi, jotta kartan voi sitoa päivämäärään. */
+export const jaksoNro = (pvm) => {
+  const kk = Math.floor(pvm / 100) % 100, pv = pvm % 100;
+  const alkuun = [0, 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334][kk];
+  return String(Math.min(36, Math.floor((alkuun + pv - 1) / 10)) + 1).padStart(2, '0');
+};
+
 export async function* readObservations() {
   const asemat = JSON.parse(await readFile(new URL('../data/asemat.json', import.meta.url), 'utf8'));
   const mk = JSON.parse(await readFile(new URL('../data/maakuntarajat.json', import.meta.url), 'utf8'));
@@ -88,7 +96,8 @@ export async function* readObservations() {
       // klusterointiavaimessa vaan hajallaan oleva joukko, ja juuri siksi se
       // kannattaa olla oma bittikarttansa.
       const doc = { id: String(++n), pvm: p, asema: id,
-                    kk: String(Math.floor(p / 100) % 100).padStart(2, '0') };
+                    kk: String(Math.floor(p / 100) % 100).padStart(2, '0'),
+                    jakso: jaksoNro(p) };
       if (a.maakunta) doc.maakunta = a.maakunta;
       for (const k of ['tmax', 'tmin', 'tavg', 'sade', 'lumi'])
         if (d[k] !== undefined) doc[k] = d[k];

@@ -11,6 +11,32 @@ export const KK_NIMI = ['tammi','helmi','maalis','huhti','touko','kesä',
                         'heinä','elo','syys','loka','marras','joulu'];
 
 /** Lumikauden kuukaudet järjestyksessä: syksystä kesään, jolloin talvi on yhtenä kaarena. */
+/** Hiihtokauden kuukaudet ja niiden pituudet. */
+/**
+ * Kaksi lajia, sama koneisto. Rajat ovat valittuja eivätkä luonnonvakioita,
+ * ja ne on siksi kirjoitettu yhteen paikkaan näkyviin.
+ */
+export const LAJIT = {
+  hiihto: {
+    nimi: 'hiihto', vari: '--s1',
+    lumiNimi: 'lunta yli 20 cm', lumiEhto: [{ range: { lumi: { gte: 20 } } }],
+    lampoNimi: 'hiihtokeli −20…0 °C',
+    lampoEhto: [{ range: { tmin: { gte: -20 } } }, { range: { tmax: { lte: 0 } } }],
+    valoTarve: [2, 6],                       // alle 2 h ei lainkaan, 6 h täysi
+    kuvaus: 'lunta yli 20 cm, −20…0 °C, valoa vähintään kuusi tuntia',
+  },
+  juoksu: {
+    nimi: 'polkujuoksu', vari: '--s2',
+    lumiNimi: 'maa sula', lumiEhto: [{ range: { lumi: { lt: 1 } } }],
+    lampoNimi: 'juoksukeli 10…15 °C',
+    lampoEhto: [{ range: { tmax: { gte: 10, lte: 15 } } }],
+    valoTarve: [5, 10],
+    kuvaus: 'maa sula, päivän ylin 10…15 °C, valoa vähintään kymmenen tuntia',
+  },
+};
+
+export const HIIHTOKK = ['11', '12', '01', '02', '03', '04'];
+
 export const LUMIKAUSI = ['09','10','11','12','01','02','03','04','05','06','07','08'];
 
 export function makeQueries(reader, avaaLumi) {
@@ -88,6 +114,40 @@ export function makeQueries(reader, avaaLumi) {
         if (solut.length) out.push({ vyohyke: v, etela: +v.slice(0, 2), solut });
       }
       return out;
+    },
+
+    /**
+     * Olosuhteet yhdessä kymmenen päivän jaksossa, asemittain.
+     *
+     * Jakso on oma bittikarttansa, joten kartan voi sitoa päivämäärään ilman
+     * että kyselyn muoto muuttuu. Vain valittu jakso ajetaan, ja ajettu jää
+     * muistiin — osiot ovat muuttumattomia eikä välimuisti voi vanhentua.
+     *
+     * Lumi ja lämpötila ovat eri artefakteissa ja eri asemilla; liitos tehdään
+     * selaimessa koordinaattien perusteella.
+     */
+    async olot(laji, jakso) {
+      const K = LAJIT[laji];
+      const lumi = await lumiReader();
+      const kausi = { range: { pvm: { gte: 19910101 } } };
+      const AS = { a: { terms: { field: 'asema', size: 1000 } } };
+      const osuus = async (rd, nimi, pohja, ehto) => {
+        const [n, o] = [
+          await timedOn(rd, `${nimi}, jakso ${jakso}: kaikki`,
+            { query: { bool: { filter: [kausi, { term: { jakso } }, ...pohja] } }, size: 0, aggs: AS }),
+          await timedOn(rd, `${nimi}, jakso ${jakso}: ehto täyttyy`,
+            { query: { bool: { filter: [kausi, { term: { jakso } }, ...ehto] } }, size: 0, aggs: AS }),
+        ];
+        const N = Object.fromEntries(n.aggregations.a.buckets.map(b => [b.key, b.doc_count]));
+        const O = Object.fromEntries(o.aggregations.a.buckets.map(b => [b.key, b.doc_count]));
+        // Alle viiden vuoden havainnot pois: yksi poikkeusvuosi heittäisi osuuden.
+        return Object.fromEntries(Object.entries(N).filter(([, v]) => v >= 50)
+          .map(([k, v]) => [k, (O[k] ?? 0) / v]));
+      };
+      return {
+        lumi: await osuus(lumi, K.lumiNimi, [{ exists: { field: 'lumi' } }], K.lumiEhto),
+        lampo: await osuus(reader, K.lampoNimi, [{ exists: { field: 'tmax' } }], K.lampoEhto),
+      };
     },
 
     /**
@@ -211,6 +271,8 @@ export function makeQueries(reader, avaaLumi) {
             catalogBytes: JSON.stringify(cat).length,
             alku: cat.clustering.boundaries[0][0], loppu: cat.clustering.boundaries.at(-1)[0] },
     has: k => k in B,
+    /** Jaksokohtainen haku kutsutaan suoraan, koska avain riippuu valinnasta. */
+    olot: (laji, jakso) => B.olot(laji, jakso),
     async load(target, keys) {
       await Promise.all(keys.map(async k => { target[k] = await get(k); }));
       return target;

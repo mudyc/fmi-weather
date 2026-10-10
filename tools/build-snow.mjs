@@ -11,7 +11,7 @@
  */
 import { writeFileSync, readFileSync } from 'node:fs';
 import { build } from '../src/build/builder.js';
-import { readSnow } from './parse-snow.mjs';
+import { readSnow, jaksoNro } from './parse-snow.mjs';
 
 const out = new URL('../data/lumi.l0', import.meta.url).pathname;
 
@@ -55,6 +55,7 @@ for await (const d of readSnow()) {
   asemat[id].n++;
   docs.push({ id: String(++n), pvm: d.pvm, asema: id, lumi: d.lumi,
               kk: String(Math.floor(d.pvm / 100) % 100).padStart(2, '0'),
+              jakso: jaksoNro(d.pvm),
               // Yhden asteen vyöhyke: "6061" = 60-61°N. Lajittuu merkkijonona.
               vyohyke: String(Math.floor(d.lat)) + String(Math.floor(d.lat) + 1),
               ...(asemat[id].maakunta ? { maakunta: asemat[id].maakunta } : {}) });
@@ -66,9 +67,9 @@ writeFileSync(new URL('../viz/lumiasemat.json', import.meta.url), JSON.stringify
 const t0 = Date.now();
 const { catalog, bytes } = await build({
   docs, index: 'lumi', clusteringField: 'pvm', outPath: out,
-  indexFields: ['pvm', 'asema', 'vyohyke', 'kk', 'maakunta', 'lumi'],
+  indexFields: ['pvm', 'asema', 'vyohyke', 'kk', 'jakso', 'maakunta', 'lumi'],
   storedFields: ['asema', 'pvm', 'lumi'],
-  fieldTypes: { asema: 'keyword', vyohyke: 'keyword', kk: 'keyword',
+  fieldTypes: { asema: 'keyword', vyohyke: 'keyword', kk: 'keyword', jakso: 'keyword',
                 maakunta: 'keyword', pvm: 'numeric', lumi: 'numeric' },
 });
 console.log(`\nrakennettu ${(Date.now() - t0) / 1000} s`);

@@ -59,6 +59,21 @@ tarvittaisiin kysely jokaista vuoden ja kuukauden paria kohti.
 Lähteen arvo **−1 tarkoittaa paljasta maata**, ei puuttuvaa havaintoa, ja se
 luetaan nollaksi senttimetriksi.
 
+## Aikasidonnaiset kartat
+
+Kumpikin artefakti sai `jakso`-kentän: vuoden **kymmenen päivän jakso**, 01–37,
+omana bittikarttanaan. Se on kuukautta kolme kertaa tarkempi, ja sen ansiosta
+kartan voi sitoa päivämäärään ilman että kyselyn muoto muuttuu — vain valittu
+jakso ajetaan, neljä kyselyä, ja ajettu jää välimuistiin.
+
+Hiihto ja polkujuoksu ovat sama koneisto eri rajoilla. Rajat ovat **valittuja
+eivätkä luonnonvakioita**, ja se näkyy tuloksessa: polkujuoksun yläraja 15 vs
+18 astetta siirtää järjestystä mediaanissa 14 ja pahimmillaan 105 sijaa.
+
+Päivämäärä paljastaa myös sen minkä kausisumma piilottaa. Koko kesän yli
+laskettuna polkujuoksun kärki on rannikolla ja saarissa, mutta **alkuheinäkuussa
+paras keli on Lapissa** — etelä on silloin liian kuuma 10–15 asteen kaistalle.
+
 ## Koko ja hinta
 
 | | |

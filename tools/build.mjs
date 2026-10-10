@@ -23,13 +23,13 @@ console.log(`sisäänluku valmis: ${docs.length.toLocaleString('en')} dokumentti
 const t0 = Date.now();
 const { catalog, bytes } = await build({
   docs, index: 'saa', clusteringField: 'pvm', outPath: out,
-  indexFields: ['pvm', 'asema', 'maakunta', 'kk', 'tmax', 'tmin', 'tavg', 'sade', 'lumi'],
+  indexFields: ['pvm', 'asema', 'maakunta', 'kk', 'jakso', 'tmax', 'tmin', 'tavg', 'sade', 'lumi'],
   // Tallennetut kentät olivat 352 MB eli 44 % artefaktista. Sade ja lumi ovat
   // aggregointisuureita joita ei näytetä riveinä, joten ne jäävät indeksiin
   // mutta pois tallennuslohkoista. Lämpötila jää, koska "kylmin päivä" on
   // luonteva rivikysely.
   storedFields: ['asema', 'pvm', 'tmax', 'tmin'],
-  fieldTypes: { asema: 'keyword', maakunta: 'keyword', kk: 'keyword',
+  fieldTypes: { asema: 'keyword', maakunta: 'keyword', kk: 'keyword', jakso: 'keyword',
                 pvm: 'numeric', tmax: 'numeric', tmin: 'numeric',
                 tavg: 'numeric', sade: 'numeric', lumi: 'numeric' },
 });

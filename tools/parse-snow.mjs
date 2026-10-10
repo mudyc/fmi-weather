@@ -12,6 +12,14 @@ import { createInterface } from 'node:readline';
 
 const DIR = new URL('../data/fmi/', import.meta.url);
 
+/** Vuoden 10 päivän jakso, 01..37. Syklinen valitsin kuten kuukausi mutta
+ *  kolme kertaa tarkempi, jotta kartan voi sitoa päivämäärään. */
+export const jaksoNro = (pvm) => {
+  const kk = Math.floor(pvm / 100) % 100, pv = pvm % 100;
+  const alkuun = [0, 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334][kk];
+  return String(Math.min(36, Math.floor((alkuun + pv - 1) / 10)) + 1).padStart(2, '0');
+};
+
 export async function* readSnow() {
   const files = (await readdir(DIR)).filter(f => f.endsWith('.xml.gz')).sort();
   for (const f of files) {

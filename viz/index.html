@@ -99,6 +99,32 @@ a{color:var(--s1)}
   <span id="qstat" class="qstat"></span>
 </nav>
 
+<section id="s-hiihto">
+  <h2>Hiihtäjän taivas</h2>
+  <p class="sub">Missä kannattaa hiihtää valittuna ajankohtana. Ehtoina lunta yli 20 cm, lämpötila −20…0 °C ja valoa vähintään kuusi tuntia — yksikään näistä yksin ei kerro paikkaa, sillä lunta on eniten siellä missä on pimeintä ja kylmintä.</p>
+  <div class="ctl" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:10px 0">
+    <label for="pvm-hiihto" style="font-size:12px;color:var(--ink-2)">Ajankohta</label>
+    <input type="range" id="pvm-hiihto" min="1" max="37" step="1" value="8" style="width:260px">
+    <output id="pvmOut-hiihto" style="font-size:13px;font-weight:600"></output>
+  </div>
+  <div class="fig"><svg id="kartta-hiihto"></svg></div>
+  <div class="legend" id="legend-hiihto"></div>
+  <div class="note" id="note-hiihto"></div>
+</section>
+
+<section id="s-juoksu">
+  <h2>Polkujuoksijan taivas</h2>
+  <p class="sub">Sama kysymys toisin päin: maa sula, päivän ylin 10…15 °C eli ei liian kuuma, ja valoa vähintään kymmenen tuntia.</p>
+  <div class="ctl" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:10px 0">
+    <label for="pvm-juoksu" style="font-size:12px;color:var(--ink-2)">Ajankohta</label>
+    <input type="range" id="pvm-juoksu" min="1" max="37" step="1" value="19" style="width:260px">
+    <output id="pvmOut-juoksu" style="font-size:13px;font-weight:600"></output>
+  </div>
+  <div class="fig"><svg id="kartta-juoksu"></svg></div>
+  <div class="legend" id="legend-juoksu"></div>
+  <div class="note" id="note-juoksu"></div>
+</section>
+
 <section id="s-lumi">
   <h2>Lumi pohjoisesta etelään</h2>
   <p class="sub">Lumen syvyys leveysvyöhykkeittäin, pohjoisin ylimpänä. Rivit ovat
@@ -255,11 +281,12 @@ const svgSize = (sel, h) => {
   return [el, w, h];
 };
 
-const [asemat, rajat] = await Promise.all([d3.json('asemat.json'), d3.json('maakuntarajat.json')]);
+const [asemat, rajat, lumiasemat_] = await Promise.all([
+  d3.json('asemat.json'), d3.json('maakuntarajat.json'), d3.json('lumiasemat.json')]);
 const { Reader } = await import('../src/read/reader.js');
 const { ChunkedHttpTransport } = await import('../src/transport/chunked-http.js');
 const { HttpTransport } = await import('../src/transport/http.js');
-const { makeQueries, KK_NIMI, LUMIKAUSI } = await import('./queries.js');
+const { makeQueries, KK_NIMI, LUMIKAUSI, LAJIT } = await import('./queries.js');
 
 const ART = new URL('../data/' + (new URLSearchParams(location.search).get('art') ?? 'saa.l0'), location.href).href;
 let transport;
@@ -299,6 +326,117 @@ const dekadit = rows => {
     if (!d.has(k)) d.set(k, []); d.get(k).push(r); }
   return [...d].filter(([, v]) => v.length >= 5);
 };
+
+// Jakso 01..37 -> päivämääräväli. Jakso 37 on kuuden päivän mittainen.
+const jaksoVali = j => {
+  const alku = (j - 1) * 10;
+  const nimi = d => { const kk = [31,28,31,30,31,30,31,31,30,31,30,31]; let m = 0, p = d;
+    while (p >= kk[m]) { p -= kk[m]; m++; } return `${p + 1}.${m + 1}.`; };
+  return [nimi(alku), nimi(Math.min(364, alku + 9))];
+};
+const km2 = (a, b) => { const R = 6371, dLa = (b.lat - a.lat) * Math.PI / 180, dLo = (b.lon - a.lon) * Math.PI / 180;
+  const x = Math.sin(dLa / 2) ** 2 + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLo / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(x)); };
+// Asemaparit haetaan kerran: lumi ja lämpötila ovat eri asemilla, ja alle
+// viiden kilometrin päässä toisistaan ne ovat käytännössä sama paikka.
+let parit_ = null;
+const parit = () => (parit_ ??= (() => {
+  const L = Object.entries(lumiasemat_).filter(([, a]) => a.n >= 2000);
+  const out = [];
+  for (const [tid, t] of Object.entries(asemat)) {
+    if (t.lat == null) continue;
+    const [lid, d] = L.map(([k, a]) => [k, km2(t, a)]).reduce((x, y) => y[1] < x[1] ? y : x, [null, 1e9]);
+    if (d <= 5) out.push({ ...t, tid, lid, etaisyys: d });
+  }
+  return out;
+})());
+
+const piirraOlot = (laji) => {
+  const K = LAJIT[laji];
+  const slider = document.getElementById('pvm-' + laji);
+  const out = document.getElementById('pvmOut-' + laji);
+  const valoPaino = v => { const [a, b] = K.valoTarve; return v >= b ? 1 : v <= a ? 0 : (v - a) / (b - a); };
+
+  const piirra = () => {
+    const j = String(+slider.value).padStart(2, '0');
+    const [a, b] = jaksoVali(+slider.value);
+    out.textContent = `${a}–${b}`;
+    const D_ = D['olot_' + laji + '_' + j];
+    if (!D_) return;
+    // Keskipäivä jaksossa riittää valon arviointiin: kymmenessä päivässä
+    // valomäärä muuttuu korkeintaan puolisen tuntia.
+    const doy = (+slider.value - 1) * 10 + 5;
+
+    const rows = parit().map(p => {
+      const ps = D_.lumi[p.lid], pt = D_.lampo[p.tid];
+      if (ps == null || pt == null) return null;
+      return { ...p, osuus: ps * pt * valoPaino(valotunnit(p.lat, doy)), ps, pt };
+    }).filter(Boolean).sort((x, y) => y.osuus - x.osuus);
+    if (!rows.length) return;
+
+    const [svg, wid, h] = svgSize('#kartta-' + laji, 480);
+    const proj = d3.geoMercator().fitSize([wid, h - 10], rajat);
+    svg.append('g').selectAll('path').data(rajat.features).join('path')
+       .attr('d', d3.geoPath(proj)).attr('fill', css('--null')).attr('fill-opacity', .5)
+       .attr('stroke', css('--surface-1')).attr('stroke-width', .6);
+    // Kiinteä asteikko 0-100 %, jotta päivämäärän siirto näyttää kauden
+    // etenemisen eikä vain värjää karttaa uudelleen joka kerta.
+    const scale = d3.scaleThreshold().domain([0.1, 0.3, 0.5, 0.7]).range(RAMP());
+    svg.append('g').selectAll('circle').data(rows).join('circle')
+       .attr('cx', r => proj([r.lon, r.lat])[0]).attr('cy', r => proj([r.lon, r.lat])[1])
+       .attr('r', r => 3 + 5 * r.osuus)
+       .attr('fill', r => r.osuus < 0.02 ? css('--null') : scale(r.osuus))
+       .attr('stroke', css('--surface-1')).attr('stroke-width', .8)
+       .on('mousemove', (ev, r) => showTip(
+          `<b>${r.nimi}</b><br><b>${Math.round(100 * r.osuus)} %</b> vuosista kelpo keli` +
+          `<br><span class="k">lumiehto ${Math.round(100 * r.ps)} % · lämpöehto ${Math.round(100 * r.pt)} %` +
+          `<br>valoa ${num(valotunnit(r.lat, doy))} h · lumiasema ${num(r.etaisyys, 1)} km</span>`, ev))
+       .on('mouseleave', hideTip);
+    for (const r of rows.slice(0, 3))
+      svg.append('text').attr('x', proj([r.lon, r.lat])[0] + 10).attr('y', proj([r.lon, r.lat])[1] + 4)
+         .attr('font-size', 12).attr('font-weight', 600).attr('fill', css('--ink-1')).text(r.nimi);
+    legend('#legend-' + laji, [['alle 10 %', RAMP()[0]], ['10–30 %', RAMP()[1]],
+      ['30–50 %', RAMP()[2]], ['50–70 %', RAMP()[3]], ['yli 70 %', RAMP()[4]]]);
+
+    const hyvat = rows.filter(r => r.osuus >= 0.5).length;
+    d3.select('#note-' + laji).html(
+      `<b>${a}–${b}: paras ${rows[0].nimi}, ${Math.round(100 * rows[0].osuus)} % vuosista.</b>
+       Seuraavat ${rows.slice(1, 4).map(r => `${r.nimi} ${Math.round(100 * r.osuus)} %`).join(', ')}.
+       ${hyvat ? `Yli puolet vuosista kelpo keli <b>${hyvat}</b> paikassa.` :
+                 'Yhdessäkään paikassa ehdot eivät täyty yli puolena vuosista tähän aikaan.'}
+       <br><br><b>Ehdot: ${K.kuvaus}.</b> Rajat ovat valittuja eivätkä luonnonvakioita.
+       Kokeilin polkujuoksussa myös ylärajaa 18 astetta, ja järjestys siirtyi mediaanissa
+       14 ja pahimmillaan 105 sijaa — eli luku kertoo yhtä paljon rajasta kuin paikasta.
+       <br><br><b>Osuudet kerrotaan keskenään kuin ne olisivat riippumattomia.</b> Ne eivät ole:
+       lumi ja pakkanen kulkevat yhdessä, joten hiihtoluku on todennäköisesti <i>aliarvio</i>.
+       Lumi ja lämpötila tulevat lisäksi eri asemilta, jotka on pariutettu alle viiden
+       kilometrin etäisyydellä — ${rows.length} paikkaa koko maassa.
+       <br><br>Havaintoasema ei ole latu eikä polku: asema seisoo aukealla, reitti kulkee
+       metsässä ja vaaroilla. Jaksot ovat kymmenen päivän mittaisia, aineisto 1991–2026.`);
+  };
+
+  slider.oninput = async () => {
+    const j = String(+slider.value).padStart(2, '0');
+    const avain = 'olot_' + laji + '_' + j;
+    const [a, b] = jaksoVali(+slider.value);
+    out.textContent = `${a}–${b}`;
+    if (!D[avain]) {
+      const ennen = Q.costs.length, t0 = performance.now();
+      slider.disabled = true; stat.textContent = 'haetaan…';
+      D[avain] = await Q.olot(laji, j);
+      slider.disabled = false;
+      const ajetut = Q.costs.slice(ennen);
+      stat.innerHTML = `<b>${ajetut.length}</b> kyselyä &middot; ` +
+        `<b>${(ajetut.reduce((x, c) => x + c.bytes, 0) / 1e6).toFixed(1)} MB</b> &middot; ` +
+        `<b>${Math.round(performance.now() - t0)} ms</b>`;
+    } else stat.textContent = 'muistista, 0 kyselyä';
+    piirra();
+  };
+  return slider.oninput();
+};
+
+reg('s-hiihto', 'Hiihtäjän taivas', [], () => piirraOlot('hiihto'));
+reg('s-juoksu', 'Polkujuoksijan taivas', [], () => piirraOlot('juoksu'));
 
 reg('s-lumi', 'Lumi pohjoisesta etelään', ['lumiVyohykkeet'], () => {
   const data = D.lumiVyohykkeet;
@@ -873,9 +1011,11 @@ async function show(id) {
     stat.textContent = 'haetaan…';
     try {
       await Q.load(D, c.keys);
-      c.draw(); c.drawn = true;
+      // Osa kuvaajista hakee itse lisää (jaksokohtaiset kartat), joten piirto
+      // on odotettava ennen kuin sen hinta lasketaan.
+      await c.draw(); c.drawn = true;
       const ran = Q.costs.slice(before);
-      stat.innerHTML = `<b>${ran.length}</b> kysely${ran.length === 1 ? '' : 'ä'} &middot; ` +
+      if (ran.length) stat.innerHTML = `<b>${ran.length}</b> kysely${ran.length === 1 ? '' : 'ä'} &middot; ` +
         `<b>${(ran.reduce((a, q) => a + q.bytes, 0) / 1e6).toFixed(1)} MB</b> &middot; ` +
         `<b>${Math.round(performance.now() - t0)} ms</b>`;
     } catch (e) { stat.innerHTML = `virhe: ${String(e.message).slice(0, 90)}`; console.error(e); }
