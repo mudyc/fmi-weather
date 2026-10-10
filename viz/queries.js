@@ -43,6 +43,42 @@ export function makeQueries(reader) {
 
   const B = {
     /** Talviöiden lämpötila vuosittain. Kuukausi on bittikartta, vuosi granulaväli. */
+    /**
+     * Lämpö ja sade asemittain, ilmastonormaalikaudelta 1991-2020.
+     *
+     * Kausirajaus on välttämätön eikä koristeellinen: asemat ovat eri ajoilta,
+     * ja ilman sitä 1910-1950 toiminut asema näyttäisi kylmemmältä kuin
+     * 1991-2026 toiminut. Se olisi lämpenemistä, ei paikkaa.
+     */
+    async paratiisi() {
+      const kausi = { range: { pvm: { gte: 19910101, lte: 20201231 } } };
+      const asemittain = sub => ({ a: { terms: { field: 'asema', size: 500 }, aggs: sub } });
+      const [kesa, sade] = [
+        await timed('kesän päivälämpötila asemittain 1991-2020',
+          { query: { bool: { filter: [kausi, { terms: { kk: ['06', '07', '08'] } }] } }, size: 0,
+            aggs: asemittain({ t: { avg: { field: 'tmax' } } }) }),
+        await timed('sademäärä asemittain 1991-2020',
+          { query: { bool: { filter: [kausi, { exists: { field: 'sade' } }] } }, size: 0,
+            aggs: asemittain({ s: { avg: { field: 'sade' } } }) }),
+      ];
+      // Sadepäivät erikseen: millimetrit ja päivät korreloivat vain 0,84, ja ero
+      // on systemaattinen. Etelässä sataa harvemmin mutta rajummin, pohjoisessa
+      // useammin ja kevyemmin, joten mittarin valinta vaihtaa voittajan.
+      const paivat = await timed('sadepäivät (yli 1 mm) asemittain 1991-2020',
+        { query: { bool: { filter: [kausi, { range: { sade: { gt: 1 } } }] } }, size: 0,
+          aggs: { a: { terms: { field: 'asema', size: 500 } } } });
+      const p = Object.fromEntries(paivat.aggregations.a.buckets.map(b => [b.key, b.doc_count]));
+      const s = Object.fromEntries(sade.aggregations.a.buckets.map(b => [b.key, { n: b.doc_count, mm: b.s.value }]));
+      // Noin kymmenen kesää ja kymmenen vuotta sadetta: vähemmällä yksi
+      // poikkeuksellinen vuosi siirtäisi aseman koko kartalla.
+      return kesa.aggregations.a.buckets
+        .filter(b => b.doc_count >= 900 && (s[b.key]?.n ?? 0) >= 3600)
+        .map(b => ({ asema: b.key, kesa: b.t.value,
+                     mm: 365 * s[b.key].mm,
+                     pv: 365 * (p[b.key] ?? 0) / s[b.key].n,
+                     kesia: b.doc_count, mittauksia: s[b.key].n }));
+    },
+
     async talvi() {
       const res = await timed('talviöiden lämpötila vuosittain',
         { query: { terms: { kk: TALVI } }, size: 0, aggs: vuodet({ t: { avg: { field: 'tmin' } } }) });

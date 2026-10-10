@@ -48,6 +48,11 @@ p.sub{color:var(--ink-2);font-size:15px;margin:0 0 16px;max-width:66ch}
 .picker select,.picker button{font:inherit;font-size:14px;padding:5px 10px;border:1px solid var(--rule);
   border-radius:6px;background:var(--surface-1);color:var(--ink-1);cursor:pointer}
 .picker select{max-width:44ch}
+.seg{display:inline-flex;border:1px solid var(--rule);border-radius:6px;overflow:hidden}
+.seg button{font:inherit;font-size:13px;padding:4px 11px;cursor:pointer;border:0;
+  border-left:1px solid var(--rule);background:var(--surface-1);color:var(--ink-2)}
+.seg button:first-child{border-left:0}
+.seg button[aria-pressed="true"]{background:var(--s1);color:#fff;font-weight:600}
 .qstat{font-size:12px;color:var(--ink-2);margin-left:auto}
 section{margin:0 0 10px}
 .fig{background:var(--surface-1);border:1px solid var(--rule);border-radius:12px;padding:12px;margin:14px 0}
@@ -93,6 +98,24 @@ a{color:var(--s1)}
   <button id="next" title="Seuraava (→ tai n)">Seuraava &rarr;</button>
   <span id="qstat" class="qstat"></span>
 </nav>
+
+<section id="s-paratiisi">
+  <h2>Suomen paratiisi</h2>
+  <p class="sub">Lämpimin ja vähäsateisin paikka — paitsi ettei sellaista ole, koska
+     lämpö ja kuivuus eivät kulje käsi kädessä. Siirrä säädintä sen mukaan kumpaa
+     arvostat, niin voittaja vaihtuu. Luvut ovat ilmastonormaalikaudelta 1991–2020,
+     jotta asemat ovat vertailukelpoisia keskenään.</p>
+  <div class="ctl" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:10px 0">
+    <label for="paino" style="font-size:12px;color:var(--ink-2)">Mitä arvostat</label>
+    <span style="font-size:12px;color:var(--ink-3)">kuivuutta</span>
+    <input type="range" id="paino" min="0" max="100" step="5" value="50" style="width:220px">
+    <span style="font-size:12px;color:var(--ink-3)">lämpöä</span>
+    <output id="painoOut" style="font-size:13px;font-weight:600"></output>
+    <span class="seg" id="mittari" style="margin-left:4px"></span>
+  </div>
+  <div class="fig"><svg id="paratiisi"></svg></div>
+  <div class="note" id="paratiisi-note"></div>
+</section>
 
 <section id="s-talvi">
   <h2>Talviyöt lämpenevät</h2>
@@ -216,6 +239,98 @@ const dekadit = rows => {
     if (!d.has(k)) d.set(k, []); d.get(k).push(r); }
   return [...d].filter(([, v]) => v.length >= 5);
 };
+
+reg('s-paratiisi', 'Suomen paratiisi', ['paratiisi'], () => {
+  const rows = D.paratiisi.map(r => ({ ...r, ...asemat[r.asema] })).filter(r => r.lat != null);
+  // Pareto: asema on rintamalla jos mikään toinen ei ole sekä lämpimämpi että kuivempi.
+  const paretoFront = key => rows.filter(x => !rows.some(y => y !== x && y.kesa >= x.kesa
+      && y[key] <= x[key] && (y.kesa > x.kesa || y[key] < x[key]))).sort((a, b) => b.kesa - a.kesa);
+  const MITTARIT = { mm: { nimi: 'millimetrit', yks: 'mm', akseli: 'vuosisade, mm' },
+                     pv: { nimi: 'sadepäivät', yks: 'sadepäivää', akseli: 'sadepäiviä vuodessa (yli 1 mm)' } };
+  const seg = document.getElementById('mittari');
+  if (!seg.children.length) for (const [k, m] of Object.entries(MITTARIT)) {
+    const b = document.createElement('button');
+    b.textContent = m.nimi; b.dataset.k = k; b.setAttribute('aria-pressed', String(k === 'pv'));
+    seg.append(b);
+  }
+  let mittari = 'pv';
+  const lampoAla = d3.min(rows, r => r.kesa), lampoYla = d3.max(rows, r => r.kesa);
+  // Pisteytys yhteismitallistaa kaksi eri yksikköä: molemmat 0-1 aineiston
+  // ääripäiden välillä, eikä kumpikaan siten hallitse pelkän asteikkonsa takia.
+  const pisteet = (r, w, lo, hi) => w * (r.kesa - lampoAla) / (lampoYla - lampoAla)
+                          + (1 - w) * (hi - r[mittari]) / (hi - lo);
+
+  const slider = document.getElementById('paino'), out = document.getElementById('painoOut');
+
+  const piirra = () => {
+    for (const b of seg.children) b.setAttribute('aria-pressed', String(b.dataset.k === mittari));
+    const MI = MITTARIT[mittari];
+    const sadeAla = d3.min(rows, r => r[mittari]), sadeYla = d3.max(rows, r => r[mittari]);
+    const front = paretoFront(mittari);
+    const w = +slider.value / 100;
+    out.textContent = w === 0 ? 'vain kuivuus' : w === 1 ? 'vain lämpö'
+      : `${Math.round(w * 100)} % lämpöä`;
+    const voittaja = rows.reduce((a, b) => pisteet(b, w, sadeAla, sadeYla) > pisteet(a, w, sadeAla, sadeYla) ? b : a);
+
+    const [svg, wid, h] = svgSize('#paratiisi', 420);
+    const ml = 58, mr = 120, mt = 16, mb = 42;
+    const x = d3.scaleLinear().domain([lampoAla - .3, lampoYla + .3]).range([ml, wid - mr]);
+    // Sade käännettynä: ylhäällä kuiva, jolloin "oikea yläkulma" on paratiisi.
+    const pad = (sadeYla - sadeAla) * 0.06;
+    const y = d3.scaleLinear().domain([sadeYla + pad, sadeAla - pad]).range([h - mb, mt]);
+    svg.append('g').attr('transform', `translate(${ml},0)`)
+       .call(d3.axisLeft(y).ticks(6).tickSize(-(wid - ml - mr)))
+       .call(g => { g.select('.domain').remove(); g.selectAll('line').attr('stroke', css('--rule'));
+                    g.selectAll('text').attr('fill', css('--ink-3')); });
+    svg.append('g').attr('transform', `translate(0,${h - mb})`).call(d3.axisBottom(x).ticks(7).tickFormat(d => d + '°'))
+       .call(g => { g.select('.domain').attr('stroke', css('--rule')); g.selectAll('text').attr('fill', css('--ink-3')); });
+    svg.append('text').attr('x', ml).attr('y', h - 8).attr('font-size', 11.5).attr('fill', css('--ink-3'))
+       .text('kesäpäivän ylin lämpötila →');
+    svg.append('text').attr('transform', `translate(14,${mt + 10})rotate(-90)`).attr('text-anchor', 'end')
+       .attr('font-size', 11.5).attr('fill', css('--ink-3')).text('← ' + MI.akseli + ' (ylhäällä kuivaa)');
+
+    svg.append('path').datum(front).attr('fill', 'none').attr('stroke', css('--ink-3'))
+       .attr('stroke-width', 1.2).attr('stroke-dasharray', '4 4').attr('opacity', .6)
+       .attr('d', d3.line().x(r => x(r.kesa)).y(r => y(r[mittari])));
+    const onFront = new Set(front.map(r => r.asema));
+    svg.append('g').selectAll('circle').data(rows).join('circle')
+       .attr('cx', r => x(r.kesa)).attr('cy', r => y(r[mittari]))
+       .attr('r', r => r === voittaja ? 8 : onFront.has(r.asema) ? 5 : 3.5)
+       .attr('fill', r => r === voittaja ? css('--s2') : onFront.has(r.asema) ? css('--s1') : css('--ink-3'))
+       .attr('opacity', r => r === voittaja || onFront.has(r.asema) ? 1 : .45)
+       .attr('stroke', css('--surface-1')).attr('stroke-width', r => r === voittaja ? 2 : .8)
+       .on('mousemove', (ev, r) => showTip(
+          `<b>${r.nimi}</b><br>kesäpäivä ${num(r.kesa)} °C<br>${Math.round(r.mm)} mm, ${Math.round(r.pv)} sadepäivää` +
+          `<br><span class="k">${onFront.has(r.asema) ? 'Pareto-rintamalla' : ''}</span>`, ev))
+       .on('mouseleave', hideTip);
+    svg.append('text').attr('x', x(voittaja.kesa) + 13).attr('y', y(voittaja[mittari]) + 4)
+       .attr('font-size', 13).attr('font-weight', 600).attr('fill', css('--ink-1')).text(voittaja.nimi);
+
+    const jarj = [...rows].sort((a, b) => pisteet(b, w, sadeAla, sadeYla) - pisteet(a, w, sadeAla, sadeYla)).slice(0, 5);
+    d3.select('#paratiisi-note').html(
+      `<b>${voittaja.nimi}: ${num(voittaja.kesa)} °C, ${Math.round(voittaja.mm)} mm ja
+       ${Math.round(voittaja.pv)} sadepäivää.</b> Seuraavat: ${jarj.slice(1).map(r => r.nimi).join(', ')}.
+       <br><br><b>Mittari vaihtaa vastauksen.</b> Millimetreinä lämpö ja kuivuus ovat ristiriidassa:
+       niiden korrelaatio on <b>+0,26</b>, eli lämpimät paikat ovat hieman <i>sateisempia</i>, ja
+       Pareto-rintamalla on 15 asemaa Turusta Utsjoelle. Sadepäivinä korrelaatio on
+       <b>−0,03</b> eli olematon, rintamalla on enää 5 asemaa, ja etelä voittaa molemmilla
+       mittareilla.
+       <br><br><b>Ero on systemaattinen.</b> Millimetrit ja sadepäivät korreloivat vain 0,84:
+       etelässä sataa harvemmin mutta rajummin, pohjoisessa useammin ja kevyemmin. Turun
+       lentoasema on millimetreissä 124. kuivin mutta sadepäivissä 33.; Sodankylän Lokka
+       on millimetreissä 20. mutta päivissä 86.
+       <br><br>Mukana ${rows.length} asemaa joilla on vähintään kymmenen kesää ja kymmenen vuotta
+       sademittauksia kaudelta 1991–2020. Katkoviiva on Pareto-rintama: ne ${front.length} asemaa
+       joita kuivemmaksi ei pääse menettämättä lämpöä.
+       <br><br><b>Yösateita ei voi erottaa.</b> Aineisto on vuorokausiarvoja, joten “sataako
+       yöllä vai päivällä” ei ole tästä vastattavissa. Se vaatisi Ilmatieteen laitoksen
+       tuntihavainnot, ja ne ovat samassa hintaluokassa kuin pilvisyys: kymmeniä megatavuja
+       XML:ää vuorokautta kohti.`);
+  };
+  slider.oninput = piirra;
+  seg.onclick = ev => { const b = ev.target.closest('button'); if (!b) return; mittari = b.dataset.k; piirra(); };
+  piirra();
+});
 
 reg('s-talvi', 'Talviyöt lämpenevät', ['talvi'], () => {
   const rows = D.talvi.filter(r => r.n >= 2000 && r.arvo != null);
