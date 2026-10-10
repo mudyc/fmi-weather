@@ -37,6 +37,28 @@ kaikki samassa aallossa.
 **+3,4 astetta ja pakkaspäivät kolmannekseen.** 1980-luku erottuu kylmänä
 poikkeamana ja muutos tapahtuu 1990-luvulla.
 
+## Lumi omana artefaktinaan
+
+Ilmatieteen laitoksen lumensyvyys 1990–2026 on **erillinen artefakti**, koska
+asemat ovat eri: GHCN tuntee ne tunnuksella, FMI vain koordinaatilla, ja jakso
+on lyhyempi. Yhdistäminen olisi vaatinut nimien arvaamista.
+
+| | |
+| --- | ---: |
+| havaintoja | 3 975 673 |
+| asemia | 903 (194 nimettyä) |
+| artefakti | 241 MB, 6 osaa |
+| rakennusaika | 9,8 s |
+
+Leveysvyöhyke on oma bittikarttansa, joten “pohjoisesta etelään” on yksi kysely
+vyöhykettä kohti. Ja yksi temppu tekee koko vuosi × kuukausi -matriisista
+halvan: histogramin numeerinen väli **100** pilkkoo klusterointiavaimen
+`YYYYMMDD` muotoon `YYYYMM00`, eli vuosi-kuukausi-ämpäreihin. Ilman sitä
+tarvittaisiin kysely jokaista vuoden ja kuukauden paria kohti.
+
+Lähteen arvo **−1 tarkoittaa paljasta maata**, ei puuttuvaa havaintoa, ja se
+luetaan nollaksi senttimetriksi.
+
 ## Koko ja hinta
 
 | | |

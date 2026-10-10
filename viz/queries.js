@@ -10,7 +10,10 @@ export const KUUKAUDET = ['01','02','03','04','05','06','07','08','09','10','11'
 export const KK_NIMI = ['tammi','helmi','maalis','huhti','touko','kesä',
                         'heinä','elo','syys','loka','marras','joulu'];
 
-export function makeQueries(reader) {
+/** Lumikauden kuukaudet järjestyksessä: syksystä kesään, jolloin talvi on yhtenä kaarena. */
+export const LUMIKAUSI = ['09','10','11','12','01','02','03','04','05','06','07','08'];
+
+export function makeQueries(reader, avaaLumi) {
   const cache = new Map();
   const costs = [];
   const cat = reader.catalog;
@@ -24,6 +27,25 @@ export function makeQueries(reader) {
     gate = mine.catch(() => {});
     return mine;
   };
+  /** Lumi on oma artefaktinsa; avataan vasta kun sitä tarvitaan. */
+  let lumiP = null;
+  const lumiReader = () => (lumiP ??= avaaLumi());
+  async function timedOn(rd, label, body) {
+    const mine = gate.then(() => runOn(rd, label, body));
+    gate = mine.catch(() => {});
+    return mine;
+  }
+  async function runOn(rd, label, body) {
+    rd.resetStats();
+    const t0 = performance.now();
+    const res = await rd.search(body);
+    const s = rd.transport.stats;
+    const ms = performance.now() - t0, io = Math.min(ms, s.fetchMs ?? 0);
+    costs.push({ label, ms, io, cpu: Math.max(0, ms - io),
+                 rounds: s.rounds, reads: s.reads, bytes: s.bytes, query: body });
+    return res;
+  }
+
   async function run(label, body) {
     reader.resetStats();
     const t0 = performance.now();
@@ -43,6 +65,49 @@ export function makeQueries(reader) {
 
   const B = {
     /** Talviöiden lämpötila vuosittain. Kuukausi on bittikartta, vuosi granulaväli. */
+    /**
+     * Lumen syvyys leveysvyöhykkeittäin, vuosi-kuukausi-tarkkuudella.
+     *
+     * Yksi kysely vyöhykettä kohti riittää koko matriisiin, koska histogramin
+     * numeerinen väli 100 pilkkoo klusterointiavaimen YYYYMMDD muotoon
+     * YYYYMM00 — eli vuosi-kuukausi-ämpäreihin. Ilman sitä tarvittaisiin
+     * kysely jokaista vuoden ja kuukauden paria kohti.
+     */
+    async lumiVyohykkeet() {
+      const lumi = await lumiReader();
+      const vyohykkeet = Object.keys(lumi.catalog.fields.vyohyke.values).sort().reverse();  // pohjoisin ensin
+      const out = [];
+      for (const v of vyohykkeet) {
+        const res = await timedOn(lumi, `lumen syvyys ${v.slice(0, 2)}-${v.slice(2)}°N`,
+          { query: { term: { vyohyke: v } }, size: 0,
+            aggs: { v: { histogram: { field: 'pvm', interval: 100, aggs: { s: { avg: { field: 'lumi' } } } } } } });
+        const solut = res.aggregations.v.buckets
+          .filter(b => b.doc_count >= 20)
+          .map(b => ({ vuosi: Math.floor(b.key / 10000), kk: String(Math.floor(b.key / 100) % 100).padStart(2, '0'),
+                       cm: b.s.value, n: b.doc_count }));
+        if (solut.length) out.push({ vyohyke: v, etela: +v.slice(0, 2), solut });
+      }
+      return out;
+    },
+
+    /**
+     * Karhunkierros: yhden aseman toukokuu, päivätarkkuudella.
+     *
+     * Tämä on sivun ainoa kysely joka hakee dokumentteja eikä ämpäreitä —
+     * 1 141 riviä tallennuslohkoista. Aggregointi ei kelpaisi, koska kysymys
+     * on päiväkohtainen todennäköisyys eikä keskiarvo.
+     */
+    async karhunkierros() {
+      const lumi = await lumiReader();
+      const ASEMA = '66.3700_29.3119';                 // Kuusamo Kiutaköngäs, Oulanka
+      const res = await timedOn(lumi, 'Kiutaköngäs, touko- ja kesäkuu',
+        { query: { bool: { filter: [{ term: { asema: ASEMA } }, { terms: { kk: ['05', '06'] } }] } },
+          size: 3000, sort: [{ pvm: 'asc' }] });
+      return res.hits.hits.map(h => h._source)
+        .map(d => ({ vuosi: Math.floor(d.pvm / 10000), kk: Math.floor(d.pvm / 100) % 100,
+                     pv: d.pvm % 100, cm: d.lumi }));
+    },
+
     /**
      * Lämpö ja sade asemittain, ilmastonormaalikaudelta 1991-2020.
      *

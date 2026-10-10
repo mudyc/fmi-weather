@@ -99,6 +99,31 @@ a{color:var(--s1)}
   <span id="qstat" class="qstat"></span>
 </nav>
 
+<section id="s-lumi">
+  <h2>Lumi pohjoisesta etelään</h2>
+  <p class="sub">Lumen syvyys leveysvyöhykkeittäin, pohjoisin ylimpänä. Rivit ovat
+     allekkain ja samalla pystyasteikolla, joten ne ovat vertailukelpoisia keskenään.
+     Aikajana on lumikausi syyskuusta elokuuhun, jolloin talvi on yhtenä kaarena
+     eikä katkea vuodenvaihteessa.</p>
+  <div class="ctl" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:10px 0">
+    <label style="font-size:12px;color:var(--ink-2)">Näkymä</label>
+    <span class="seg" id="lumitila"></span>
+  </div>
+  <div class="fig"><svg id="lumi"></svg></div>
+  <div class="legend" id="lumi-legend"></div>
+  <div class="note" id="lumi-note"></div>
+</section>
+
+<section id="s-nuts">
+  <h2>Juostaanko Karhunkierros lumessa</h2>
+  <p class="sub">NUTS Karhunkierros juostaan Oulangalla toukokuun lopulla. Kuusamon
+     Kiutaköngäs on havaintoasema reitin varrella, ja sen 37 vuoden historia kertoo
+     millä todennäköisyydellä maassa on lunta minäkin päivänä.</p>
+  <div class="fig"><svg id="nuts"></svg></div>
+  <div class="legend" id="nuts-legend"></div>
+  <div class="note" id="nuts-note"></div>
+</section>
+
 <section id="s-paratiisi">
   <h2>Suomen paratiisi</h2>
   <p class="sub">Lämpimin ja vähäsateisin paikka — paitsi ettei sellaista ole, koska
@@ -234,7 +259,7 @@ const [asemat, rajat] = await Promise.all([d3.json('asemat.json'), d3.json('maak
 const { Reader } = await import('../src/read/reader.js');
 const { ChunkedHttpTransport } = await import('../src/transport/chunked-http.js');
 const { HttpTransport } = await import('../src/transport/http.js');
-const { makeQueries, KK_NIMI } = await import('./queries.js');
+const { makeQueries, KK_NIMI, LUMIKAUSI } = await import('./queries.js');
 
 const ART = new URL('../data/' + (new URLSearchParams(location.search).get('art') ?? 'saa.l0'), location.href).href;
 let transport;
@@ -243,7 +268,16 @@ catch { transport = new HttpTransport(ART); }
 // Sektiot ovat muuttumattomia eivätkä voi vanhentua, joten välimuistin ainoa
 // raja on selaimen muisti. Oletus 128 MB ei riitä kun sarakkeita on useita.
 const reader = await new Reader(transport, { cacheLimit: 320 * 1024 * 1024 }).open();
-const Q = makeQueries(reader);
+// Lumi on oma artefaktinsa ja avataan vasta kun sitä kysytään, jotta muut
+// kuvaajat eivät maksa sen avaamista.
+const avaaLumi = async () => {
+  const url = new URL('../data/lumi.l0', location.href).href;
+  let t;
+  try { t = await new ChunkedHttpTransport(url + '.json').open(); }
+  catch { t = new HttpTransport(url); }
+  return new Reader(t, { cacheLimit: 320 * 1024 * 1024 }).open();
+};
+const Q = makeQueries(reader, avaaLumi);
 const D = { costs: Q.costs, meta: Q.meta };
 
 function renderHeader() {
@@ -265,6 +299,150 @@ const dekadit = rows => {
     if (!d.has(k)) d.set(k, []); d.get(k).push(r); }
   return [...d].filter(([, v]) => v.length >= 5);
 };
+
+reg('s-lumi', 'Lumi pohjoisesta etelään', ['lumiVyohykkeet'], () => {
+  const data = D.lumiVyohykkeet;
+  const seg = document.getElementById('lumitila');
+  if (!seg.children.length) for (const [k, t] of [['ka', 'keskisyvyys'], ['vuodet', 'kaikki vuodet']]) {
+    const b = document.createElement('button');
+    b.textContent = t; b.dataset.k = k; b.setAttribute('aria-pressed', String(k === 'ka'));
+    seg.append(b);
+  }
+  let tila = 'ka';
+
+  const vuodet = [...new Set(data.flatMap(v => v.solut.map(s => s.vuosi)))].sort();
+  const vari = d3.scaleSequential()
+    .domain([vuodet[0], vuodet.at(-1)])
+    .interpolator(d3.interpolateRgbBasis(RAMP()));
+
+  const piirra = () => {
+    for (const b of seg.children) b.setAttribute('aria-pressed', String(b.dataset.k === tila));
+    const RH = 74, ml = 86, mr = 20, mt = 10, mb = 30;
+    const [svg, wid] = svgSize('#lumi', data.length * RH + mt + mb);
+    const x = d3.scalePoint().domain(LUMIKAUSI).range([ml, wid - mr]).padding(.4);
+    // Sama pystyasteikko joka riville: muuten rivit eivät olisi vertailukelpoisia,
+    // ja juuri vertailu on tämän kuvaajan koko tarkoitus.
+    const yla = d3.max(data, v => d3.max(v.solut, s => s.cm)) * 1.02;
+    const ykor = d3.scaleLinear().domain([0, yla]).range([RH - 8, 6]);
+
+    data.forEach((v, i) => {
+      const g = svg.append('g').attr('transform', `translate(0,${mt + i * RH})`);
+      g.append('line').attr('x1', ml - 8).attr('x2', wid - mr).attr('y1', RH - 8).attr('y2', RH - 8)
+       .attr('stroke', css('--rule'));
+      g.append('text').attr('x', ml - 14).attr('y', RH / 2).attr('text-anchor', 'end')
+       .attr('font-size', 12.5).attr('fill', css('--ink-1'))
+       .text(`${v.etela}–${v.etela + 1}°N`);
+      const kk = m => v.solut.filter(s => s.kk === m);
+      if (tila === 'ka') {
+        const ka = LUMIKAUSI.map(m => { const s = kk(m); return { m, cm: s.length ? d3.mean(s, z => z.cm) : null }; })
+                            .filter(p => p.cm != null);
+        g.append('path').datum(ka).attr('fill', css('--s1')).attr('opacity', .22)
+         .attr('d', d3.area().x(p => x(p.m)).y0(RH - 8).y1(p => ykor(p.cm)).curve(d3.curveMonotoneX));
+        g.append('path').datum(ka).attr('fill', 'none').attr('stroke', css('--s1')).attr('stroke-width', 2)
+         .attr('d', d3.line().x(p => x(p.m)).y(p => ykor(p.cm)).curve(d3.curveMonotoneX));
+        g.append('g').selectAll('circle').data(ka).join('circle')
+         .attr('cx', p => x(p.m)).attr('cy', p => ykor(p.cm)).attr('r', 8).attr('fill', 'transparent')
+         .on('mousemove', (ev, p) => showTip(
+            `<b>${v.etela}–${v.etela + 1}°N</b><br>${KK_NIMI[+p.m - 1]}kuu<br>keskisyvyys ${num(p.cm)} cm`, ev))
+         .on('mouseleave', hideTip);
+      } else {
+        for (const y of vuodet) {
+          const sarja = LUMIKAUSI.map(m => {
+            // Lumikausi kulkee vuodenvaihteen yli: syys-joulu kuuluu vuoteen y,
+            // tammi-elo seuraavaan. Muuten talvi katkeaisi kahdeksi puolikkaaksi.
+            const vv = +m >= 9 ? y : y + 1;
+            const s = v.solut.find(z => z.kk === m && z.vuosi === vv);
+            return s ? { m, cm: s.cm } : null;
+          }).filter(Boolean);
+          if (sarja.length < 6) continue;
+          g.append('path').datum(sarja).attr('fill', 'none').attr('stroke', vari(y))
+           .attr('stroke-width', 1.3).attr('opacity', .75)
+           .attr('d', d3.line().x(p => x(p.m)).y(p => ykor(p.cm)).curve(d3.curveMonotoneX));
+        }
+      }
+      if (i === data.length - 1) g.append('g').attr('transform', `translate(0,${RH - 8})`)
+        .call(d3.axisBottom(x).tickFormat(m => KK_NIMI[+m - 1].slice(0, 3)))
+        .call(gg => { gg.select('.domain').attr('stroke', css('--rule'));
+                      gg.selectAll('text').attr('fill', css('--ink-3')).attr('font-size', 10.5); });
+    });
+    svg.append('text').attr('x', 6).attr('y', mt + 12).attr('font-size', 11).attr('fill', css('--ink-3'))
+       .text(`0–${Math.round(yla)} cm`);
+
+    legend('#lumi-legend', tila === 'ka' ? [['kaikkien vuosien keskiarvo', css('--s1')]]
+      : [vuodet[0], vuodet[Math.floor(vuodet.length / 3)], vuodet[Math.floor(2 * vuodet.length / 3)], vuodet.at(-1)]
+          .map(y => [String(y), vari(y)]));
+
+    const pohjoisin = data[0], etelaisin = data.at(-1);
+    const huippu = v => { const m = LUMIKAUSI.map(mm => ({ mm, cm: d3.mean(v.solut.filter(s => s.kk === mm), z => z.cm) || 0 }))
+                                             .reduce((a, b) => b.cm > a.cm ? b : a); return m; };
+    const hp = huippu(pohjoisin), he = huippu(etelaisin);
+    d3.select('#lumi-note').html(
+      `<b>${pohjoisin.etela}–${pohjoisin.etela + 1}°N: huippu ${KK_NIMI[+hp.mm - 1]}kuussa ${num(hp.cm)} cm.
+       ${etelaisin.etela}–${etelaisin.etela + 1}°N: ${KK_NIMI[+he.mm - 1]}kuussa ${num(he.cm)} cm.</b>
+       Pystyasteikko on sama joka rivillä, joten rivit ovat vertailukelpoisia: pohjoisessa kaari on
+       sekä korkeampi että leveämpi, eli lunta on enemmän ja pidempään.
+       ${tila === 'vuodet' ? `<br><br>Jokainen viiva on yksi lumikausi, vaalea vanha ja tumma uusi.
+       Hajonta vuosien välillä on isompi kuin ero vierekkäisten vyöhykkeiden välillä — yksittäisestä
+       talvesta ei siis näe trendiä.` : ''}
+       <br><br>Aineisto on Ilmatieteen laitoksen lumensyvyys 1990–2026, ${data.length} vyöhykettä.
+       Arvo −1 tarkoittaa lähteessä paljasta maata, ja se on luettu nollaksi senttimetriksi.
+       Vyöhykkeen luku on sen asemien keskiarvo, joten se kuvaa tasankoa eikä tunturia.`);
+  };
+  seg.onclick = ev => { const b = ev.target.closest('button'); if (!b) return; tila = b.dataset.k; piirra(); };
+  piirra();
+});
+
+reg('s-nuts', 'Juostaanko Karhunkierros lumessa', ['karhunkierros'], () => {
+  const rows = D.karhunkierros.filter(r => r.kk === 5);
+  const paivat = d3.range(1, 32).map(pv => {
+    const v = rows.filter(r => r.pv === pv);
+    return { pv, n: v.length,
+             lunta: v.length ? v.filter(r => r.cm > 0).length / v.length : null,
+             yli10: v.length ? v.filter(r => r.cm >= 10).length / v.length : null,
+             ka: v.length ? d3.mean(v, r => r.cm) : null };
+  }).filter(p => p.n >= 20);
+
+  const [svg, wid, h] = svgSize('#nuts', 360);
+  const ml = 48, mr = 20, mt = 16, mb = 38;
+  const x = d3.scaleLinear().domain([1, 31]).range([ml, wid - mr]);
+  const y = d3.scaleLinear().domain([0, 1]).range([h - mb, mt]);
+  svg.append('g').attr('transform', `translate(${ml},0)`)
+     .call(d3.axisLeft(y).ticks(5).tickFormat(d3.format('.0%')).tickSize(-(wid - ml - mr)))
+     .call(g => { g.select('.domain').remove(); g.selectAll('line').attr('stroke', css('--rule'));
+                  g.selectAll('text').attr('fill', css('--ink-3')); });
+  svg.append('g').attr('transform', `translate(0,${h - mb})`)
+     .call(d3.axisBottom(x).tickValues([1, 5, 10, 15, 20, 25, 31]).tickFormat(d => d + '.5.'))
+     .call(g => { g.select('.domain').attr('stroke', css('--rule')); g.selectAll('text').attr('fill', css('--ink-3')); });
+  for (const [key, col] of [['lunta', '--s1'], ['yli10', '--s2']])
+    svg.append('path').datum(paivat).attr('fill', 'none').attr('stroke', css(col)).attr('stroke-width', 2.5)
+       .attr('d', d3.line().x(p => x(p.pv)).y(p => y(p[key])).curve(d3.curveMonotoneX));
+  svg.append('g').selectAll('circle').data(paivat).join('circle')
+     .attr('cx', p => x(p.pv)).attr('cy', p => y(p.lunta)).attr('r', 9).attr('fill', 'transparent')
+     .on('mousemove', (ev, p) => showTip(
+        `<b>${p.pv}. toukokuuta</b><br>lunta ${Math.round(100 * p.lunta)} % vuosista` +
+        `<br>yli 10 cm ${Math.round(100 * p.yli10)} %<br><span class="k">keskisyvyys ${num(p.ka)} cm` +
+        `, ${p.n} vuotta</span>`, ev))
+     .on('mouseleave', hideTip);
+  legend('#nuts-legend', [['lunta maassa', css('--s1')], ['yli 10 cm', css('--s2')]]);
+
+  const at = pv => paivat.find(p => p.pv === pv);
+  const myohaiset = [...new Set(rows.filter(r => r.pv >= 25 && r.cm > 0).map(r => r.vuosi))].sort();
+  d3.select('#nuts-note').html(
+    `<b>Toukokuun lopulla lunta ei käytännössä ole.</b> Kiutaköngäällä 25. toukokuuta lunta on ollut
+     ${Math.round(100 * at(25).lunta)} % vuosista, ja koko jaksolla 1990–2026 lunta on mitattu
+     25. päivän jälkeen vain ${myohaiset.length} kertaa: ${myohaiset.join(', ')} — ja silloinkin 1–2 cm.
+     Viimeksi siis ennen vuosituhannen vaihdetta.
+     <br><br><b>Kaksi viikkoa aiemmin tilanne on toinen.</b> 10. toukokuuta lunta on ollut
+     ${Math.round(100 * at(10).lunta)} % vuosista ja yli kymmenen senttiä ${Math.round(100 * at(10).yli10)} %;
+     15. päivänä ${Math.round(100 * at(15).lunta)} % ja ${Math.round(100 * at(15).yli10)} %.
+     Ensimmäinen kisa ajoittui siis selvästi epävarmempaan kohtaan kuin nykyinen.
+     <br><br><b>Sulaminen on aikaistunut.</b> Viimeinen lumipäivä oli 1990-luvulla keskimäärin
+     20. toukokuuta, 2000-luvulla 12. ja 2010-luvulla 9. päivä.
+     <br><br><b>Asema ei ole reitti.</b> Kiutaköngäs on Oulankajoen laaksossa noin 160 metrissä,
+     ja mittaus tehdään aukealta. Karhunkierros nousee vaaroille ja kulkee pohjoisrinteiden
+     kuusikoissa, joissa kinokset säilyvät viikkoja pidempään. Nämä luvut ovat siis alaraja:
+     “ei lunta asemalla” ei tarkoita “ei hankea polulla”.`);
+});
 
 reg('s-paratiisi', 'Suomen paratiisi', ['paratiisi'], () => {
   const rows = D.paratiisi.map(r => ({ ...r, ...asemat[r.asema] })).filter(r => r.lat != null);
