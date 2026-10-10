@@ -1,9 +1,10 @@
 # Artefaktit ja raakadata rakennetaan lähteestä
 data/raw/
 data/fmi/
+# Kokonainen artefakti ei kuulu versionhallintaan, mutta paloitellut osat
+# kuuluvat: GitHub Pages tarjoilee ne, ja ilman niitä sivu ei toimi. Yksi osa
+# on 45 MiB eli alle GitHubin 100 MiB:n rajan ja alle 50 MiB:n varoituksen.
 data/*.l0
-data/*.l0.[0-9][0-9][0-9]
-data/*.l0.json
 node_modules/
 *.env
 *.pem
