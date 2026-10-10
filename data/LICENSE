@@ -1,0 +1,15 @@
+Havaintoaineistot
+=================
+
+GHCN-Daily (lämpötila, sademäärä)
+  National Centers for Environmental Information, NOAA.
+  https://www.ncei.noaa.gov/products/land-based-station/global-historical-climatology-network-daily
+  Vapaasti käytettävissä. Menne, M.J. et al. (2012), J. Atmos. Oceanic Technol., 29, 897-910.
+  Suomen osuus on Ilmatieteen laitoksen havaintoja GHCN:n kautta.
+
+Ilmatieteen laitoksen avoin data (lumen syvyys)
+  https://www.ilmatieteenlaitos.fi/avoin-data
+  CC BY 4.0.
+
+Maakuntarajat
+  https://github.com/samilaine/hallinnollisetrajat

@@ -1,0 +1,11 @@
+# Artefaktit ja raakadata rakennetaan lähteestä
+data/raw/
+data/fmi/
+data/*.l0
+data/*.l0.[0-9][0-9][0-9]
+data/*.l0.json
+node_modules/
+*.env
+*.pem
+*.key
+.DS_Store

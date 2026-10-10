@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Suomen säähavainnot 1908–2026</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --surface-0:#f6f5f2; --surface-1:#fcfcfb; --surface-2:#eeece7;
+  --ink-1:#0b0b0b; --ink-2:#52514e; --ink-3:#85837c; --rule:#dedbd4;
+  --s1:#2a78d6; --s2:#eb6834;
+  --seq-100:#cde2fb; --seq-250:#86b6ef; --seq-400:#3987e5; --seq-550:#1c5cab; --seq-700:#0d366b;
+  --null:#e3e1db;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  color-scheme: dark;
+  --surface-0:#111110; --surface-1:#1a1a19; --surface-2:#232321;
+  --ink-1:#ffffff; --ink-2:#c3c2b7; --ink-3:#8f8e85; --rule:#33332f;
+  --s1:#3987e5; --s2:#d95926;
+  --seq-100:#0d366b; --seq-250:#184f95; --seq-400:#2a78d6; --seq-550:#6da7ec; --seq-700:#b7d3f6;
+  --null:#2c2c29;
+} }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-0:#111110; --surface-1:#1a1a19; --surface-2:#232321;
+  --ink-1:#ffffff; --ink-2:#c3c2b7; --ink-3:#8f8e85; --rule:#33332f;
+  --s1:#3987e5; --s2:#d95926;
+  --seq-100:#0d366b; --seq-250:#184f95; --seq-400:#2a78d6; --seq-550:#6da7ec; --seq-700:#b7d3f6;
+  --null:#2c2c29;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--surface-0);color:var(--ink-1);
+  font:16px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,sans-serif}
+.wrap{max-width:900px;margin:0 auto;padding:32px 20px 64px}
+header{margin-bottom:8px}
+h1{font-size:30px;letter-spacing:-.02em;margin:0 0 10px;text-wrap:balance}
+h2{font-size:21px;letter-spacing:-.01em;margin:0 0 4px}
+p.sub{color:var(--ink-2);font-size:15px;margin:0 0 16px;max-width:66ch}
+.meta{display:flex;flex-wrap:wrap;gap:26px;margin:18px 0 0}
+.meta div{display:flex;flex-direction:column}
+.meta b{font-size:19px;letter-spacing:-.01em}
+.meta span{font-size:12px;color:var(--ink-3)}
+.picker{position:sticky;top:0;z-index:20;display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+  padding:12px 0;margin:18px 0;background:var(--surface-0);border-bottom:1px solid var(--rule)}
+.picker label{font-size:12px;color:var(--ink-2)}
+.picker select,.picker button{font:inherit;font-size:14px;padding:5px 10px;border:1px solid var(--rule);
+  border-radius:6px;background:var(--surface-1);color:var(--ink-1);cursor:pointer}
+.picker select{max-width:44ch}
+.qstat{font-size:12px;color:var(--ink-2);margin-left:auto}
+section{margin:0 0 10px}
+.fig{background:var(--surface-1);border:1px solid var(--rule);border-radius:12px;padding:12px;margin:14px 0}
+.fig svg{display:block;width:100%;height:auto}
+.legend{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:12px;color:var(--ink-2);margin:2px 0 10px}
+.swatch{width:11px;height:11px;border-radius:3px;display:inline-block;vertical-align:-1px;margin-right:5px}
+.note{background:var(--surface-2);border-radius:10px;padding:14px 16px;font-size:14px;
+  line-height:1.6;color:var(--ink-2);margin:12px 0}
+.note b{color:var(--ink-1)}
+table{border-collapse:collapse;width:100%;font-size:13.5px;margin:6px 0 10px}
+th,td{text-align:right;padding:6px 10px;border-bottom:1px solid var(--rule)}
+th:first-child,td:first-child{text-align:left}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);font-weight:600}
+code{font-family:ui-monospace,Menlo,monospace;font-size:.88em;background:var(--surface-2);
+  padding:1px 5px;border-radius:4px}
+#tip{position:fixed;pointer-events:none;opacity:0;background:var(--ink-1);color:var(--surface-1);
+  font-size:12.5px;line-height:1.45;padding:7px 10px;border-radius:7px;transition:opacity .1s;z-index:50}
+#tip .k{color:var(--ink-3)}
+footer{margin-top:40px;padding-top:18px;border-top:1px solid var(--rule);font-size:13px;color:var(--ink-3)}
+a{color:var(--s1)}
+#themeBtn{position:fixed;top:14px;right:14px;font:inherit;font-size:13px;padding:5px 11px;
+  border:1px solid var(--rule);border-radius:6px;background:var(--surface-1);color:var(--ink-2);cursor:pointer;z-index:30}
+@media(max-width:560px){.wrap{padding:20px 14px 48px}h1{font-size:24px}}
+</style>
+</head>
+<body>
+<button id="themeBtn">vaihda teema</button>
+<div id="tip"></div>
+<div class="wrap">
+
+<header>
+  <h1>Suomen säähavainnot 1908–2026</h1>
+  <p class="sub">363 havaintoasemaa, neljä miljoonaa asemapäivää, yksi muuttumaton
+     tiedosto. Sivu kyselee sitä suoraan HTTP Range -pyynnöillä — ei palvelinta,
+     ei esilaskettua JSONia. Jokainen kuvaaja on yksi tai muutama aggregointikysely,
+     ja niiden hinta näkyy sivun lopussa.</p>
+  <div class="meta" id="meta"></div>
+</header>
+
+<nav class="picker">
+  <label for="pick">Kuvaaja</label>
+  <select id="pick"></select>
+  <button id="next" title="Seuraava (→ tai n)">Seuraava &rarr;</button>
+  <span id="qstat" class="qstat"></span>
+</nav>
+
+<section id="s-talvi">
+  <h2>Talviyöt lämpenevät</h2>
+  <p class="sub">Joulu-, tammi- ja helmikuun öiden keskilämpötila vuosittain, kaikki
+     asemat yhdessä. Kuukausi on oma bittikarttansa, koska “kaikki tammikuut” ei ole
+     yhtenäinen väli aikajärjestyksessä vaan hajallaan oleva joukko.</p>
+  <div class="fig"><svg id="talvi"></svg></div>
+  <div class="note" id="talvi-note"></div>
+</section>
+
+<section id="s-pakkaset">
+  <h2>Kovat pakkaset harvinaistuvat</h2>
+  <p class="sub">Niiden havaintopäivien osuus, joina mitattiin alle −30 °C. Osuus eikä
+     lukumäärä, koska asemaverkko on kasvanut: pelkkä kappalemäärä näyttäisi trendin
+     joka on asemien määrää eikä säätä.</p>
+  <div class="fig"><svg id="pakkaset"></svg></div>
+  <div class="note" id="pakkaset-note"></div>
+</section>
+
+<section id="s-kartta">
+  <h2>Missä pakkanen puree</h2>
+  <p class="sub">Alle −30 °C mitattu osuus havaintopäivistä asemittain. Yksi piste on
+     yksi asema; mukana ne joilla on vähintään 3 000 mittauspäivää.</p>
+  <div class="fig"><svg id="kartta"></svg></div>
+  <div class="legend" id="kartta-legend"></div>
+  <div class="note" id="kartta-note"></div>
+</section>
+
+<section id="s-kierto">
+  <h2>Vuodenkierto</h2>
+  <p class="sub">Kuukauden yö- ja päivälämpötilat koko aineistossa. Kaksitoista kyselyä,
+     yksi kuukautta kohti, kukin yksi kierros.</p>
+  <div class="fig"><svg id="kierto"></svg></div>
+  <div class="note" id="kierto-note"></div>
+</section>
+
+<section id="s-maakunnat">
+  <h2>Talviyöt maakunnittain</h2>
+  <p class="sub">Sama talvikuukausien yölämpötila, mutta ämpäröitynä maakuntaan.
+     Maakunta on johdettu aseman koordinaateista sisäänluvussa, ei kyselyaikana.</p>
+  <div class="fig"><svg id="maakunnat"></svg></div>
+  <div class="note" id="maakunnat-note"></div>
+</section>
+
+<section id="s-cost">
+  <h2>Mitä nämä maksoivat</h2>
+  <p class="sub">Jokainen kuvaaja on kysely indeksiin. “Kierrokset” on riippuvien
+     edestakaisten hakujen määrä — se luku jonka minimointiin koko indeksi on rakennettu.</p>
+  <table id="costs"></table>
+  <div class="note" id="cost-note"></div>
+</section>
+
+<footer id="lahteet"></footer>
+</div>
+
+<script type="module">
+import { installBuffer } from './buffer-shim.js';
+installBuffer();
+
+const tip = document.getElementById('tip');
+const showTip = (html, ev) => {
+  tip.innerHTML = html; tip.style.opacity = 1;
+  const r = tip.getBoundingClientRect();
+  tip.style.left = Math.min(ev.clientX + 14, innerWidth - r.width - 10) + 'px';
+  tip.style.top = Math.min(ev.clientY + 14, innerHeight - r.height - 10) + 'px';
+};
+const hideTip = () => tip.style.opacity = 0;
+document.getElementById('themeBtn').onclick = () => {
+  const cur = document.documentElement.getAttribute('data-theme');
+  const dark = cur ? cur === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  document.documentElement.setAttribute('data-theme', dark ? 'light' : 'dark');
+  location.reload();
+};
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fi = new Intl.NumberFormat('fi-FI');
+const num = (v, d = 1) => v == null ? '–' : v.toFixed(d).replace('.', ',');
+const msFmt = v => v == null ? '–' : v >= 10 ? Math.round(v) + ' ms'
+  : v >= 0.05 ? String(Math.round(v * 10) / 10).replace('.', ',') + ' ms' : v > 0 ? '< 0,1 ms' : '0 ms';
+const RAMP = () => [css('--seq-100'), css('--seq-250'), css('--seq-400'), css('--seq-550'), css('--seq-700')];
+const legend = (sel, items) => d3.select(sel).html(items.map(([l, c]) =>
+  `<span><i class="swatch" style="background:${c}"></i>${l}</span>`).join(''));
+const M = { t: 14, r: 18, b: 30, l: 46 };
+const svgSize = (sel, h) => {
+  const el = d3.select(sel), w = Math.max(320, el.node().parentNode.clientWidth - 24);
+  el.attr('viewBox', `0 0 ${w} ${h}`).attr('height', h).selectAll('*').remove();
+  return [el, w, h];
+};
+
+const [asemat, rajat] = await Promise.all([d3.json('asemat.json'), d3.json('maakuntarajat.json')]);
+const { Reader } = await import('../src/read/reader.js');
+const { ChunkedHttpTransport } = await import('../src/transport/chunked-http.js');
+const { HttpTransport } = await import('../src/transport/http.js');
+const { makeQueries, KK_NIMI } = await import('./queries.js');
+
+const ART = new URL('../data/' + (new URLSearchParams(location.search).get('art') ?? 'saa.l0'), location.href).href;
+let transport;
+try { transport = await new ChunkedHttpTransport(ART + '.json').open(); }
+catch { transport = new HttpTransport(ART); }
+// Sektiot ovat muuttumattomia eivätkä voi vanhentua, joten välimuistin ainoa
+// raja on selaimen muisti. Oletus 128 MB ei riitä kun sarakkeita on useita.
+const reader = await new Reader(transport, { cacheLimit: 320 * 1024 * 1024 }).open();
+const Q = makeQueries(reader);
+const D = { costs: Q.costs, meta: Q.meta };
+
+function renderHeader() {
+  const m = Q.meta;
+  d3.select('#meta').html(`
+    <div><b>${fi.format(m.docCount)}</b><span>asemapäivää</span></div>
+    <div><b>${Object.keys(asemat).length}</b><span>havaintoasemaa</span></div>
+    <div><b>${String(m.alku).slice(0,4)}–${String(m.loppu).slice(0,4)}</b><span>aikaväli</span></div>
+    <div><b>${fi.format(m.sections)}</b><span>indeksiosiota</span></div>
+    <div><b>${(m.catalogBytes/1e6).toFixed(1)} MB</b><span>katalogi (residentti)</span></div>`);
+}
+
+const CHARTS = [];
+const reg = (id, title, keys, draw) => CHARTS.push({ id, title, keys, draw, drawn: false });
+
+const dekadit = rows => {
+  const d = new Map();
+  for (const r of rows) { const k = Math.floor(r.vuosi / 10) * 10;
+    if (!d.has(k)) d.set(k, []); d.get(k).push(r); }
+  return [...d].filter(([, v]) => v.length >= 5);
+};
+
+reg('s-talvi', 'Talviyöt lämpenevät', ['talvi'], () => {
+  const rows = D.talvi.filter(r => r.n >= 2000 && r.arvo != null);
+  const [svg, w, h] = svgSize('#talvi', 340);
+  const x = d3.scaleLinear().domain(d3.extent(rows, r => r.vuosi)).range([M.l, w - M.r]);
+  const y = d3.scaleLinear().domain(d3.extent(rows, r => r.arvo)).nice().range([h - M.b, M.t]);
+  svg.append('g').attr('transform', `translate(${M.l},0)`)
+     .call(d3.axisLeft(y).ticks(6).tickFormat(d => d + '°').tickSize(-(w - M.l - M.r)))
+     .call(g => { g.select('.domain').remove(); g.selectAll('line').attr('stroke', css('--rule')); g.selectAll('text').attr('fill', css('--ink-3')); });
+  svg.append('g').attr('transform', `translate(0,${h - M.b})`).call(d3.axisBottom(x).ticks(8).tickFormat(d3.format('d')))
+     .call(g => { g.select('.domain').attr('stroke', css('--rule')); g.selectAll('text').attr('fill', css('--ink-3')); });
+  svg.append('path').datum(rows).attr('fill', 'none').attr('stroke', css('--ink-3')).attr('stroke-width', 1)
+     .attr('opacity', .5).attr('d', d3.line().x(r => x(r.vuosi)).y(r => y(r.arvo)));
+  // Vuosikymmenten keskiarvot: yksittäisten vuosien heilunta peittäisi trendin.
+  const dk = dekadit(rows).map(([k, v]) => ({ k, m: d3.mean(v, r => r.arvo) }));
+  svg.append('path').datum(dk).attr('fill', 'none').attr('stroke', css('--s1')).attr('stroke-width', 2.5)
+     .attr('d', d3.line().x(d => x(d.k + 5)).y(d => y(d.m)).curve(d3.curveMonotoneX));
+  svg.append('g').selectAll('circle').data(dk).join('circle')
+     .attr('cx', d => x(d.k + 5)).attr('cy', d => y(d.m)).attr('r', 4).attr('fill', css('--s1'))
+     .on('mousemove', (ev, d) => showTip(`<b>${d.k}-luku</b><br>${num(d.m, 2)} °C`, ev)).on('mouseleave', hideTip);
+  const a = dk[0], z = dk.at(-1);
+  d3.select('#talvi-note').html(
+    `<b>${a.k}-luvulta ${z.k}-luvulle ${num(z.m - a.m, 1)} astetta.</b> Ohut viiva on yksittäinen
+     talvi, paksu vuosikymmenen keskiarvo. Yksittäiset vuodet heiluvat useita asteita, joten
+     trendin näkee vasta keskiarvoista. Ennen 1950-lukua asemia on vähän ja käyrä on siksi
+     epävakaa — se on otoskoko, ei sää.`);
+});
+
+reg('s-pakkaset', 'Kovat pakkaset harvinaistuvat', ['pakkaset'], () => {
+  const rows = D.pakkaset.map(r => ({ ...r, osuus: 1000 * r.n / r.kaikki }));
+  const [svg, w, h] = svgSize('#pakkaset', 320);
+  const x = d3.scaleLinear().domain(d3.extent(rows, r => r.vuosi)).range([M.l, w - M.r]);
+  const y = d3.scaleLinear().domain([0, d3.max(rows, r => r.osuus)]).nice().range([h - M.b, M.t]);
+  svg.append('g').attr('transform', `translate(${M.l},0)`)
+     .call(d3.axisLeft(y).ticks(5).tickSize(-(w - M.l - M.r)))
+     .call(g => { g.select('.domain').remove(); g.selectAll('line').attr('stroke', css('--rule')); g.selectAll('text').attr('fill', css('--ink-3')); });
+  svg.append('g').attr('transform', `translate(0,${h - M.b})`).call(d3.axisBottom(x).ticks(8).tickFormat(d3.format('d')))
+     .call(g => { g.select('.domain').attr('stroke', css('--rule')); g.selectAll('text').attr('fill', css('--ink-3')); });
+  svg.append('g').selectAll('rect').data(rows).join('rect')
+     .attr('x', r => x(r.vuosi) - 2).attr('y', r => y(r.osuus)).attr('width', 4)
+     .attr('height', r => h - M.b - y(r.osuus)).attr('rx', 1.5).attr('fill', css('--s1')).attr('opacity', .55)
+     .on('mousemove', (ev, r) => showTip(
+        `<b>${r.vuosi}</b><br>${num(r.osuus, 1)} ‰<br><span class="k">${fi.format(r.n)} / ${fi.format(r.kaikki)} päivää</span>`, ev))
+     .on('mouseleave', hideTip);
+  const dk = dekadit(rows).map(([k, v]) => ({ k, m: 1000 * d3.sum(v, r => r.n) / d3.sum(v, r => r.kaikki) }));
+  svg.append('path').datum(dk).attr('fill', 'none').attr('stroke', css('--s2')).attr('stroke-width', 2.5)
+     .attr('d', d3.line().x(d => x(d.k + 5)).y(d => y(d.m)).curve(d3.curveMonotoneX));
+  const huippu = dk.reduce((a, b) => b.m > a.m ? b : a);
+  d3.select('#pakkaset-note').html(
+    `<b>${huippu.k}-luvulla ${num(huippu.m, 1)} ‰ havaintopäivistä oli alle −30 °C; ${dk.at(-1).k}-luvulla
+     ${num(dk.at(-1).m, 1)} ‰.</b> Oranssi viiva on vuosikymmenen osuus. Pylväs on yksittäinen vuosi:
+     ne heiluvat rajusti, koska yksi kylmä jakso yhdellä alueella riittää nostamaan koko vuoden.`);
+});
+
+reg('s-kartta', 'Missä pakkanen puree', ['asemat'], () => {
+  const rows = D.asemat.map(r => ({ ...r, ...asemat[r.asema], osuus: 1000 * r.n / r.kaikki }))
+                 .filter(r => r.lat != null);
+  const [svg, w, h] = svgSize('#kartta', 460);
+  const proj = d3.geoMercator().fitSize([w, h - 10], rajat);
+  svg.append('g').selectAll('path').data(rajat.features).join('path')
+     .attr('d', d3.geoPath(proj)).attr('fill', css('--null')).attr('fill-opacity', .5)
+     .attr('stroke', css('--surface-1')).attr('stroke-width', .6);
+  const scale = d3.scaleQuantile().domain(rows.map(r => r.osuus)).range(RAMP());
+  svg.append('g').selectAll('circle').data(rows).join('circle')
+     .attr('cx', r => proj([r.lon, r.lat])[0]).attr('cy', r => proj([r.lon, r.lat])[1])
+     .attr('r', 4.5).attr('fill', r => scale(r.osuus))
+     .attr('stroke', css('--surface-1')).attr('stroke-width', .8)
+     .on('mousemove', (ev, r) => showTip(
+        `<b>${r.nimi}</b><br>${num(r.osuus, 1)} ‰ päivistä alle −30 °C` +
+        `<br><span class="k">${fi.format(r.n)} / ${fi.format(r.kaikki)} päivää</span>`, ev))
+     .on('mouseleave', hideTip);
+  const q = scale.quantiles();
+  legend('#kartta-legend', RAMP().map((c, i) => [
+    (i === 0 ? '< ' + num(q[0], 1) : i === 4 ? '> ' + num(q[3], 1) : num(q[i-1], 1) + '–' + num(q[i], 1)) + ' ‰', c]));
+  const kylmin = rows.reduce((a, b) => b.osuus > a.osuus ? b : a);
+  d3.select('#kartta-note').html(
+    `<b>${kylmin.nimi}: ${num(kylmin.osuus, 1)} ‰.</b> Pakkanen ei noudata leveysastetta vaan
+     mannerilmastoa: sisämaa ja pohjoinen ovat kylmiä, rannikko lauhempi samalla korkeudella.
+     Aineistossa on ${rows.length} asemaa joilla on vähintään 3 000 mittauspäivää.`);
+});
+
+reg('s-kierto', 'Vuodenkierto', ['kierto'], () => {
+  const rows = D.kierto;
+  const [svg, w, h] = svgSize('#kierto', 330);
+  const x = d3.scalePoint().domain(rows.map(r => r.nimi)).range([M.l + 10, w - M.r]).padding(.5);
+  const lo = d3.min(rows, r => r.yo.min), hi = d3.max(rows, r => r.paiva.max);
+  const y = d3.scaleLinear().domain([lo, hi]).nice().range([h - M.b, M.t]);
+  svg.append('g').attr('transform', `translate(${M.l},0)`)
+     .call(d3.axisLeft(y).ticks(6).tickFormat(d => d + '°').tickSize(-(w - M.l - M.r)))
+     .call(g => { g.select('.domain').remove(); g.selectAll('line').attr('stroke', css('--rule')); g.selectAll('text').attr('fill', css('--ink-3')); });
+  svg.append('g').attr('transform', `translate(0,${h - M.b})`).call(d3.axisBottom(x))
+     .call(g => { g.select('.domain').attr('stroke', css('--rule')); g.selectAll('text').attr('fill', css('--ink-3')).attr('font-size', 11); });
+  // Ääriarvot ovat koko aineiston min ja max, eivät hajonta: ne kertovat mitä
+  // kuukaudessa on ylipäätään mitattu.
+  svg.append('g').selectAll('line').data(rows).join('line')
+     .attr('x1', r => x(r.nimi)).attr('x2', r => x(r.nimi))
+     .attr('y1', r => y(r.yo.min)).attr('y2', r => y(r.paiva.max))
+     .attr('stroke', css('--ink-3')).attr('stroke-width', 1).attr('opacity', .4);
+  for (const [key, col, lab] of [['yo', '--s1', 'yö'], ['paiva', '--s2', 'päivä']])
+    svg.append('path').datum(rows).attr('fill', 'none').attr('stroke', css(col)).attr('stroke-width', 2.5)
+       .attr('d', d3.line().x(r => x(r.nimi)).y(r => y(r[key].avg)).curve(d3.curveMonotoneX));
+  svg.append('g').selectAll('circle').data(rows).join('circle')
+     .attr('cx', r => x(r.nimi)).attr('cy', r => y(r.yo.avg)).attr('r', 9).attr('fill', 'transparent')
+     .on('mousemove', (ev, r) => showTip(
+        `<b>${r.nimi}kuu</b><br>yö ${num(r.yo.avg)} °C, päivä ${num(r.paiva.avg)} °C` +
+        `<br><span class="k">ääriarvot ${num(r.yo.min)} … ${num(r.paiva.max)} °C</span>` +
+        `<br><span class="k">${fi.format(r.n)} asemapäivää</span>`, ev))
+     .on('mouseleave', hideTip);
+  const t = rows.find(r => r.kk === '01'), hei = rows.find(r => r.kk === '07');
+  d3.select('#kierto-note').html(
+    `<b>Tammikuun yö ${num(t.yo.avg)} °C, heinäkuun päivä ${num(hei.paiva.avg)} °C.</b>
+     Sininen on yölämpötilan keskiarvo, oranssi päivän; ohut pystyviiva on koko aineiston
+     ääriarvot siinä kuukaudessa. Kylmin mitattu on ${num(d3.min(rows, r => r.yo.min))} °C
+     ja lämpimin ${num(d3.max(rows, r => r.paiva.max))} °C.`);
+});
+
+reg('s-maakunnat', 'Talviyöt maakunnittain', ['maakunnat'], () => {
+  const rows = D.maakunnat;
+  const [svg, w, h] = svgSize('#maakunnat', rows.length * 24 + 30);
+  const L = 150;
+  const x = d3.scaleLinear().domain([d3.min(rows, r => r.t), 0]).nice().range([L, w - 56]);
+  const y = d3.scaleBand().domain(rows.map(r => r.maakunta)).range([8, h - 16]).padding(.25);
+  svg.append('g').selectAll('rect').data(rows).join('rect')
+     .attr('x', r => x(r.t)).attr('y', r => y(r.maakunta)).attr('height', y.bandwidth())
+     .attr('width', r => x(0) - x(r.t)).attr('rx', 3).attr('fill', css('--s1')).attr('opacity', .8)
+     .on('mousemove', (ev, r) => showTip(
+        `<b>${r.maakunta}</b><br>${num(r.t, 2)} °C<br><span class="k">${fi.format(r.n)} asemapäivää</span>`, ev))
+     .on('mouseleave', hideTip);
+  svg.append('g').selectAll('text').data(rows).join('text')
+     .attr('x', L - 10).attr('y', r => y(r.maakunta) + y.bandwidth() / 2 + 4).attr('text-anchor', 'end')
+     .attr('font-size', 12.5).attr('fill', css('--ink-1')).text(r => r.maakunta);
+  svg.append('g').selectAll('text.v').data(rows).join('text')
+     .attr('x', r => x(r.t) - 6).attr('y', r => y(r.maakunta) + y.bandwidth() / 2 + 4).attr('text-anchor', 'end')
+     .attr('font-size', 12).attr('fill', css('--ink-2')).text(r => num(r.t, 1) + '°');
+  d3.select('#maakunnat-note').html(
+    `<b>${rows[0].maakunta} ${num(rows[0].t, 1)} °C, ${rows.at(-1).maakunta} ${num(rows.at(-1).t, 1)} °C —
+     ero ${num(rows.at(-1).t - rows[0].t, 1)} astetta.</b> Luvut ovat koko aineiston yli, joten ne
+     sekoittavat eri vuosikymmeniä: maakunta jonka asemat ovat enimmäkseen vanhoja näyttää
+     kylmemmältä kuin se tänään on. Vertailu on siis maantieteestä, ei nykyilmastosta.`);
+});
+
+function renderCosts() {
+  d3.select('#costs').html(
+    `<thead><tr><th>Kysely</th><th>odotus</th><th>laskenta</th><th>yhteensä</th>` +
+    `<th>kierroksia</th><th>hakuja</th><th>siirretty</th></tr></thead><tbody>` +
+    D.costs.map(c => `<tr><td>${c.label}</td><td>${msFmt(c.io)}</td><td>${msFmt(c.cpu)}</td>` +
+      `<td>${msFmt(c.ms)}</td><td>${c.rounds}</td><td>${fi.format(c.reads)}</td>` +
+      `<td>${(c.bytes / 1e6).toFixed(1)} MB</td></tr>`).join('') +
+    `<tr><td><b>yhteensä</b></td><td><b>${msFmt(d3.sum(D.costs, c => c.io))}</b></td>` +
+    `<td><b>${msFmt(d3.sum(D.costs, c => c.cpu))}</b></td>` +
+    `<td><b>${msFmt(d3.sum(D.costs, c => c.ms))}</b></td><td></td><td></td>` +
+    `<td><b>${(d3.sum(D.costs, c => c.bytes) / 1e6).toFixed(0)} MB</b></td></tr></tbody>`);
+  const io = d3.sum(D.costs, c => c.io), cpu = d3.sum(D.costs, c => c.cpu);
+  d3.select('#cost-note').html(
+    `<b>Odotus ${msFmt(io)}, laskenta ${msFmt(cpu)}.</b> Odotus on se osa jonka selain viettää
+     tavuja kuunnellen, laskenta kaikki muu: bittikartta-algebra, popcount ja sarakkeiden läpikäynti.
+     Suhde ei ole vakio — odotusta hallitsee kierrosten määrä kertaa viive, laskentaa se luetaanko
+     sarake kokonaan läpi.
+     <br><br>Kierrosten määrä ei kasva predikaattien määrän mukana, vain rinnakkaisten hakujen.
+     Indeksin osiot ovat muuttumattomia, joten välimuistitus on triviaalisti oikein eikä
+     invalidointilogiikkaa tarvita: toinen käynti samassa kuvaajassa ei hae mitään.`);
+}
+
+d3.select('#lahteet').html(
+  `Lämpötila ja sademäärä: <a href="https://www.ncei.noaa.gov/products/land-based-station/global-historical-climatology-network-daily">GHCN-Daily</a>
+   (NOAA; Suomen osuus Ilmatieteen laitoksen havaintoja) &middot;
+   maakuntarajat <a href="https://github.com/samilaine/hallinnollisetrajat">hallinnolliset rajat</a> &middot;
+   koodi ja indeksi <a href="https://github.com/mudyc/serverless_index">serverless_index</a>.`);
+
+const SECS = CHARTS.map(c => c.id).concat(['s-cost']);
+const sel = document.getElementById('pick');
+const nextBtn = document.getElementById('next');
+const stat = document.getElementById('qstat');
+for (const c of CHARTS) sel.add(new Option(c.title, c.id));
+sel.add(new Option('Mitä nämä maksoivat', 's-cost'));
+
+let busy = false;
+async function show(id) {
+  if (busy) return;
+  busy = true; nextBtn.disabled = sel.disabled = true;
+  for (const s of SECS) { const el = document.getElementById(s); if (el) el.style.display = s === id ? '' : 'none'; }
+  sel.value = id;
+  { const u = new URL(location.href); u.searchParams.set('chart', id); history.replaceState(null, '', u); }
+  const c = CHARTS.find(x => x.id === id);
+  if (c && !c.drawn) {
+    const before = Q.costs.length, t0 = performance.now();
+    stat.textContent = 'haetaan…';
+    try {
+      await Q.load(D, c.keys);
+      c.draw(); c.drawn = true;
+      const ran = Q.costs.slice(before);
+      stat.innerHTML = `<b>${ran.length}</b> kysely${ran.length === 1 ? '' : 'ä'} &middot; ` +
+        `<b>${(ran.reduce((a, q) => a + q.bytes, 0) / 1e6).toFixed(1)} MB</b> &middot; ` +
+        `<b>${Math.round(performance.now() - t0)} ms</b>`;
+    } catch (e) { stat.innerHTML = `virhe: ${String(e.message).slice(0, 90)}`; console.error(e); }
+  } else if (c) stat.textContent = 'muistista, 0 kyselyä';
+  else { stat.textContent = ''; renderCosts(); }
+  busy = false; nextBtn.disabled = sel.disabled = false;
+}
+sel.onchange = () => show(sel.value);
+nextBtn.onclick = () => show(SECS[(SECS.indexOf(sel.value) + 1) % SECS.length]);
+addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'n') nextBtn.click();
+  if (e.key === 'ArrowLeft') show(SECS[(SECS.indexOf(sel.value) - 1 + SECS.length) % SECS.length]);
+});
+addEventListener('resize', () => { for (const c of CHARTS) if (c.drawn && c.id === sel.value) c.draw(); });
+
+renderHeader();
+await show(new URLSearchParams(location.search).get('chart') ?? CHARTS[0].id);
+</script>
+</body>
+</html>
