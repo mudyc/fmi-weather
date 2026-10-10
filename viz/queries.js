@@ -98,16 +98,22 @@ export function makeQueries(reader) {
         .filter(x => x.kaikki > 2000);
     },
 
-    /** Vuodenkierto: yksi kysely kuukautta kohti, kukin yksi kierros. */
+    /**
+     * Vuodenkierto: kaikki kaksitoista kuukautta YHDELLÄ kyselyllä.
+     *
+     * Numeeriset tilastot ovat alaämpäreitä, eivät ylätason aggregointeja —
+     * ylätasolla indeksi tuntee vain `terms`in ja `histogram`in. Kuukausi on
+     * jo oma bittikarttansa, joten terms(kk) antaa kaikki kaksitoista ämpäriä
+     * kerralla eikä kuukausikohtaista suodatinta tarvita lainkaan.
+     */
     async kierto() {
-      const out = [];
-      for (const [i, kk] of KUUKAUDET.entries()) {
-        const res = await timed(`kuukauden ${kk} lämpötilat`, { query: { term: { kk } }, size: 0,
-          aggs: { yo: { stats: { field: 'tmin' } }, paiva: { stats: { field: 'tmax' } } } });
-        out.push({ kk, nimi: KK_NIMI[i], n: res.hits.total.value,
-                   yo: res.aggregations.yo, paiva: res.aggregations.paiva });
-      }
-      return out;
+      const res = await timed('kuukausien lämpötilat', { size: 0,
+        aggs: { kk: { terms: { field: 'kk', size: 12 },
+                      aggs: { yo: { stats: { field: 'tmin' } },
+                              paiva: { stats: { field: 'tmax' } } } } } });
+      return res.aggregations.kk.buckets
+        .map(b => ({ kk: b.key, nimi: KK_NIMI[+b.key - 1], n: b.doc_count, yo: b.yo, paiva: b.paiva }))
+        .sort((a, b) => a.kk.localeCompare(b.kk));
     },
 
     /** Asemakohtainen kartta: yksi kysely, ämpärit asemittain. */

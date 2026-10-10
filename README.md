@@ -63,6 +63,8 @@ node tools/build.mjs             # -> data/saa.l0             (389 MB, 14,5 s)
 node tools/split-artifact.js data/saa.l0
 node tools/serve.js . 8080       # mikä tahansa Rangea tukeva palvelin kelpaa
 open http://127.0.0.1:8080/viz/
+
+tools/smoke.sh                   # lataa jokaisen kuvaajan ja tarkistaa että se piirtyy
 ```
 
 ## Rakenne
