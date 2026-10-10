@@ -148,6 +148,11 @@ a{color:var(--s1)}
      ensimmäisen kisan 18.5.2013 ja nykyisen kisaviikonlopun 22.–23.5.2026.</p>
   <div class="fig"><svg id="nuts"></svg></div>
   <div class="legend" id="nuts-legend"></div>
+  <p class="sub" style="margin-top:20px">Asema on laaksossa, reitti ei. Aineistossa on yksi
+     tunturiasema jolla on sama 37 vuoden jakso — Salla Värriötunturi — ja kaksi alavaa asemaa
+     lähes yhtä pohjoisessa. Oikea sarake on se mielenkiintoinen: tunturissa ei ole ohutta
+     lunta vaan hanki.</p>
+  <table id="nuts-vertailu"></table>
   <div class="note" id="nuts-note"></div>
 </section>
 
@@ -532,7 +537,7 @@ reg('s-lumi', 'Lumi pohjoisesta etelään', ['lumiVyohykkeet'], () => {
 });
 
 reg('s-nuts', 'Juostaanko Karhunkierros lumessa', ['karhunkierros'], () => {
-  const rows = D.karhunkierros.filter(r => r.kk === 5);
+  const rows = D.karhunkierros.filter(r => r.asema === 'Kiutaköngäs');
   const paivat = d3.range(1, 32).map(pv => {
     const v = rows.filter(r => r.pv === pv);
     return { pv, n: v.length,
@@ -585,8 +590,30 @@ reg('s-nuts', 'Juostaanko Karhunkierros lumessa', ['karhunkierros'], () => {
   legend('#nuts-legend', [['lunta maassa', css('--s1')], ['yli 10 cm', css('--s2')],
                          ['kisapäivä', css('--ink-3')]]);
 
+  // Vertailu: tunturi vastaan laakso. Osuus kertoo kuinka usein lunta on,
+  // syvyys taas paljonko sitä silloin on. Ohut nuoska ja puolimetrinen hanki ovat
+  // juoksijalle eri asia, ja keskiarvo kaikista vuosista piilottaisi eron: se
+  // laskee lumettomat nollina ja painaa tunturinkin luvun muutamaan senttiin.
+  const VERT = ['Kiutaköngäs', 'Värriötunturi', 'Salla Naruska', 'Salla Kelloselkä'];
+  const PAIVAT = [18, 22, 31];
+  d3.select('#nuts-vertailu').html(
+    `<thead><tr><th>Asema</th>${PAIVAT.map(p => `<th>${p}.5.</th>`).join('')}` +
+    `<th>syvyys lumipäivinä 18.–31.5.</th><th>vuosia</th></tr></thead><tbody>` +
+    VERT.map(nimi => {
+      const r = D.karhunkierros.filter(z => z.asema === nimi);
+      const vuosia = new Set(r.map(z => z.vuosi)).size;
+      const lumiset = r.filter(z => z.pv >= 18 && z.cm > 0);
+      const sol = PAIVAT.map(pv => { const v = r.filter(z => z.pv === pv);
+        return `<td>${v.length ? Math.round(100 * v.filter(z => z.cm > 0).length / v.length) : '–'} %</td>`; });
+      return `<tr><td>${nimi === 'Värriötunturi' ? `<b>${nimi}</b>` : nimi}</td>${sol.join('')}` +
+             `<td>${lumiset.length ? num(d3.mean(lumiset, z => z.cm)) : '–'} cm</td><td>${vuosia}</td></tr>`;
+    }).join('') + '</tbody>');
+
   const at = pv => paivat.find(p => p.pv === pv);
   const osuus = pv => Math.round(100 * at(pv).lunta);
+  const vert = (nimi, pv) => { const v = D.karhunkierros.filter(z => z.asema === nimi && z.pv === pv);
+    return v.length ? v.filter(z => z.cm > 0).length / v.length : 0; };
+  const syvyys = nimi => d3.mean(D.karhunkierros.filter(z => z.asema === nimi && z.pv >= 18 && z.cm > 0), z => z.cm);
   const myohaiset = [...new Set(rows.filter(r => r.pv >= 25 && r.cm > 0).map(r => r.vuosi))].sort();
   d3.select('#nuts-note').html(
     `<b>Molemmat kisapäivät osuvat sulaan maahan.</b> Ensimmäinen NUTS Karhunkierros juostiin
@@ -610,7 +637,17 @@ reg('s-nuts', 'Juostaanko Karhunkierros lumessa', ['karhunkierros'], () => {
      ja mittaus tehdään aukealta. Karhunkierros nousee vaaroille ja kulkee pohjoisrinteiden
      kuusikoissa, joissa kinokset säilyvät viikkoja pidempään. Nämä luvut ovat siis alaraja:
      “ei lunta asemalla” ei tarkoita “ei hankea polulla”. Vuoden 2013 kisaraportissa Rukalla
-     mitattiin 24 astetta lämpöä ja polulla oli silti lunta ja jäätä.`);
+     mitattiin 24 astetta lämpöä ja polulla oli silti lunta ja jäätä.
+     <br><br><b>Tunturissa ei sula vaan kestää.</b> Värriötunturilla on 22. toukokuuta lunta
+     ${Math.round(100 * vert('Värriötunturi', 22))} % vuosista ja vielä 31. päivänä
+     ${Math.round(100 * vert('Värriötunturi', 31))} %, kun Kiutaköngäällä luvut ovat
+     ${osuus(22)} % ja ${osuus(31)} %. Ero ei selity leveysasteella: Kelloselkä on Kiutaköngästä
+     puoli astetta pohjoisempana mutta alavalla maalla, ja sen luvut ovat laakson luvut.
+     Naruska on vielä pohjoisempana ja korkeammalla, ja asettuu väliin — kuten pitääkin.
+     Olennaisin on kuitenkin syvyys — kun laaksossa on lunta, sitä on toukokuun lopulla
+     ${num(syvyys('Kiutaköngäs'))} cm, tunturissa ${num(syvyys('Värriötunturi'))} cm.
+     Valtavaara voi siis hyvin olla parikymmentä senttiä hangessa päivänä jona reitti
+     muuten on paljas.`);
 });
 
 reg('s-paratiisi', 'Suomen paratiisi', ['paratiisi'], () => {

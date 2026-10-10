@@ -151,21 +151,34 @@ export function makeQueries(reader, avaaLumi) {
     },
 
     /**
-     * Karhunkierros: yhden aseman toukokuu, päivätarkkuudella.
+     * Karhunkierros: neljän aseman toukokuu, päivätarkkuudella.
      *
-     * Tämä on sivun ainoa kysely joka hakee dokumentteja eikä ämpäreitä —
-     * 1 141 riviä tallennuslohkoista. Aggregointi ei kelpaisi, koska kysymys
-     * on päiväkohtainen todennäköisyys eikä keskiarvo.
+     * Tämä on sivun ainoa kysely joka hakee dokumentteja eikä ämpäreitä.
+     * Aggregointi ei kelpaisi, koska kysymys on päiväkohtainen
+     * todennäköisyys eikä keskiarvo.
+     *
+     * Kiutaköngäs on reitin varrella laaksossa. Värriötunturi on aineiston
+     * ainoa tunturiasema jolla on sama 37 vuoden jakso, ja Naruska ja
+     * Kelloselkä ovat lähes yhtä pohjoisessa mutta alavalla maalla — ne ovat
+     * mukana siksi, että ilman niitä tunturin ja laakson ero selittyisi yhtä
+     * hyvin leveysasteella kuin korkeudella.
+     *
+     * Kesäkuu jäi pois: kuvaaja piirtää vain toukokuun, ja neljä asemaa
+     * kahdelta kuukaudelta olisi ollut nelinkertainen nouto turhaan.
      */
     async karhunkierros() {
       const lumi = await lumiReader();
-      const ASEMA = '66.3700_29.3119';                 // Kuusamo Kiutaköngäs, Oulanka
-      const res = await timedOn(lumi, 'Kiutaköngäs, touko- ja kesäkuu',
-        { query: { bool: { filter: [{ term: { asema: ASEMA } }, { terms: { kk: ['05', '06'] } }] } },
-          size: 3000, sort: [{ pvm: 'asc' }] });
+      const ASEMAT = { '66.3700_29.3119': 'Kiutaköngäs',        // Oulanka, laakso
+                       '67.7486_29.6113': 'Värriötunturi',      // tunturi
+                       '67.1623_29.1777': 'Salla Naruska',      // alava, lähes yhtä pohjoinen
+                       '66.9444_28.9769': 'Salla Kelloselkä' }; // alava
+      const res = await timedOn(lumi, 'Neljä asemaa, toukokuu',
+        { query: { bool: { filter: [{ terms: { asema: Object.keys(ASEMAT) } },
+                                    { term: { kk: '05' } }] } },
+          size: 5000, sort: [{ pvm: 'asc' }] });
       return res.hits.hits.map(h => h._source)
-        .map(d => ({ vuosi: Math.floor(d.pvm / 10000), kk: Math.floor(d.pvm / 100) % 100,
-                     pv: d.pvm % 100, cm: d.lumi }));
+        .map(d => ({ asema: ASEMAT[d.asema], vuosi: Math.floor(d.pvm / 10000),
+                     kk: Math.floor(d.pvm / 100) % 100, pv: d.pvm % 100, cm: d.lumi }));
     },
 
     /**
