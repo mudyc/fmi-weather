@@ -102,7 +102,8 @@ a{color:var(--s1)}
 <section id="s-paratiisi">
   <h2>Suomen paratiisi</h2>
   <p class="sub">Lämpimin ja vähäsateisin paikka — paitsi ettei sellaista ole, koska
-     lämpö ja kuivuus eivät kulje käsi kädessä. Siirrä säädintä sen mukaan kumpaa
+     lämpö ja kuivuus eivät kulje käsi kädessä. Lämpö tarkoittaa tässä
+     kesäpäivien ylimpien lämpötilojen keskiarvoa, ei kesän kuuminta hetkeä. Siirrä säädintä sen mukaan kumpaa
      arvostat, niin voittaja vaihtuu. Luvut ovat ilmastonormaalikaudelta 1991–2020,
      jotta asemat ovat vertailukelpoisia keskenään.</p>
   <div class="ctl" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:10px 0">
@@ -142,8 +143,9 @@ a{color:var(--s1)}
 
 <section id="s-talvi">
   <h2>Talviyöt lämpenevät</h2>
-  <p class="sub">Joulu-, tammi- ja helmikuun öiden keskilämpötila vuosittain, kaikki
-     asemat yhdessä. Kuukausi on oma bittikarttansa, koska “kaikki tammikuut” ei ole
+  <p class="sub">Joulu-, tammi- ja helmikuun <b>alimpien lämpötilojen keskiarvo</b> vuosittain,
+     kaikki asemat yhdessä. Kyse on siis vuorokausien minimien keskiarvosta, ei
+     keskilämpötilasta eikä kylmimmästä mitatusta. Kuukausi on oma bittikarttansa, koska “kaikki tammikuut” ei ole
      yhtenäinen väli aikajärjestyksessä vaan hajallaan oleva joukko.</p>
   <div class="fig"><svg id="talvi"></svg></div>
   <div class="note" id="talvi-note"></div>
@@ -169,7 +171,8 @@ a{color:var(--s1)}
 
 <section id="s-kierto">
   <h2>Vuodenkierto</h2>
-  <p class="sub">Kuukauden yö- ja päivälämpötilat koko aineistossa. Kaksitoista kyselyä,
+  <p class="sub">Kuukauden alimpien ja ylimpien lämpötilojen keskiarvot koko aineistossa,
+     sekä mitatut ääriarvot. Kaksitoista kyselyä,
      yksi kuukautta kohti, kukin yksi kierros.</p>
   <div class="fig"><svg id="kierto"></svg></div>
   <div class="note" id="kierto-note"></div>
@@ -177,7 +180,7 @@ a{color:var(--s1)}
 
 <section id="s-maakunnat">
   <h2>Talviyöt maakunnittain</h2>
-  <p class="sub">Sama talvikuukausien yölämpötila, mutta ämpäröitynä maakuntaan.
+  <p class="sub">Sama talviöiden alimpien lämpötilojen keskiarvo, mutta ämpäröitynä maakuntaan.
      Maakunta on johdettu aseman koordinaateista sisäänluvussa, ei kyselyaikana.</p>
   <div class="fig"><svg id="maakunnat"></svg></div>
   <div class="note" id="maakunnat-note"></div>
@@ -308,7 +311,7 @@ reg('s-paratiisi', 'Suomen paratiisi', ['paratiisi'], () => {
     svg.append('g').attr('transform', `translate(0,${h - mb})`).call(d3.axisBottom(x).ticks(7).tickFormat(d => d + '°'))
        .call(g => { g.select('.domain').attr('stroke', css('--rule')); g.selectAll('text').attr('fill', css('--ink-3')); });
     svg.append('text').attr('x', ml).attr('y', h - 8).attr('font-size', 11.5).attr('fill', css('--ink-3'))
-       .text('kesäpäivän ylin lämpötila →');
+       .text('kesäpäivien ylimpien lämpötilojen keskiarvo →');
     svg.append('text').attr('transform', `translate(14,${mt + 10})rotate(-90)`).attr('text-anchor', 'end')
        .attr('font-size', 11.5).attr('fill', css('--ink-3')).text('← ' + MI.akseli + ' (ylhäällä kuivaa)');
 
@@ -323,7 +326,7 @@ reg('s-paratiisi', 'Suomen paratiisi', ['paratiisi'], () => {
        .attr('opacity', r => r === voittaja || onFront.has(r.asema) ? 1 : .45)
        .attr('stroke', css('--surface-1')).attr('stroke-width', r => r === voittaja ? 2 : .8)
        .on('mousemove', (ev, r) => showTip(
-          `<b>${r.nimi}</b><br>kesäpäivä ${num(r.kesa)} °C<br>${Math.round(r.mm)} mm, ${Math.round(r.pv)} sadepäivää` +
+          `<b>${r.nimi}</b><br>kesäpäivän ylin ka. ${num(r.kesa)} °C<br>${Math.round(r.mm)} mm, ${Math.round(r.pv)} sadepäivää` +
           `<br><span class="k">${onFront.has(r.asema) ? 'Pareto-rintamalla' : ''}</span>`, ev))
        .on('mouseleave', hideTip);
     svg.append('text').attr('x', x(voittaja.kesa) + 13).attr('y', y(voittaja[mittari]) + 4)
@@ -467,7 +470,7 @@ reg('s-valo', 'Valoa vai lämpöä', ['paratiisi'], () => {
   svg.append('text').attr('x', ml).attr('y', h - 8).attr('font-size', 11.5).attr('fill', css('--ink-3'))
      .text('kesäkuun–elokuun valoisat tunnit →');
   svg.append('text').attr('transform', `translate(14,${mt + 10})rotate(-90)`).attr('text-anchor', 'end')
-     .attr('font-size', 11.5).attr('fill', css('--ink-3')).text('← kesäpäivän ylin lämpötila');
+     .attr('font-size', 11.5).attr('fill', css('--ink-3')).text('← kesäpäivien ylimpien keskiarvo');
 
   const kylmin = rows.reduce((a, b) => b.valo > a.valo ? b : a);
   const lampein = rows.reduce((a, b) => b.kesa > a.kesa ? b : a);
@@ -478,7 +481,7 @@ reg('s-valo', 'Valoa vai lämpöä', ['paratiisi'], () => {
      .attr('opacity', r => r === kylmin || r === lampein ? 1 : .45)
      .attr('stroke', css('--surface-1')).attr('stroke-width', .8)
      .on('mousemove', (ev, r) => showTip(
-        `<b>${r.nimi}</b><br>${Math.round(r.valo)} valotuntia kesässä<br>kesäpäivä ${num(r.kesa)} °C` +
+        `<b>${r.nimi}</b><br>${Math.round(r.valo)} valotuntia kesässä<br>kesäpäivän ylin ka. ${num(r.kesa)} °C` +
         `<br><span class="k">${num(r.lat, 2)}°N · ${yottomat(r.lat)} yötöntä yötä</span>`, ev))
      .on('mouseleave', hideTip);
   for (const [r, col] of [[kylmin, '--s2'], [lampein, '--s1']])
@@ -613,8 +616,8 @@ reg('s-kierto', 'Vuodenkierto', ['kierto'], () => {
      .on('mouseleave', hideTip);
   const t = rows.find(r => r.kk === '01'), hei = rows.find(r => r.kk === '07');
   d3.select('#kierto-note').html(
-    `<b>Tammikuun yö ${num(t.yo.avg)} °C, heinäkuun päivä ${num(hei.paiva.avg)} °C.</b>
-     Sininen on yölämpötilan keskiarvo, oranssi päivän; ohut pystyviiva on koko aineiston
+    `<b>Tammikuun alin keskimäärin ${num(t.yo.avg)} °C, heinäkuun ylin ${num(hei.paiva.avg)} °C.</b>
+     Sininen viiva on vuorokauden alimpien keskiarvo, oranssi ylimpien; ohut pystyviiva on koko aineiston
      ääriarvot siinä kuukaudessa. Kylmin mitattu on ${num(d3.min(rows, r => r.yo.min))} °C
      ja lämpimin ${num(d3.max(rows, r => r.paiva.max))} °C.`);
 });
