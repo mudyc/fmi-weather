@@ -144,7 +144,8 @@ a{color:var(--s1)}
   <h2>Juostaanko Karhunkierros lumessa</h2>
   <p class="sub">NUTS Karhunkierros juostaan Oulangalla toukokuun lopulla. Kuusamon
      Kiutaköngäs on havaintoasema reitin varrella, ja sen 37 vuoden historia kertoo
-     millä todennäköisyydellä maassa on lunta minäkin päivänä.</p>
+     millä todennäköisyydellä maassa on lunta minäkin päivänä. Pystyviivat merkitsevät
+     ensimmäisen kisan 18.5.2013 ja nykyisen kisaviikonlopun 22.–23.5.2026.</p>
   <div class="fig"><svg id="nuts"></svg></div>
   <div class="legend" id="nuts-legend"></div>
   <div class="note" id="nuts-note"></div>
@@ -551,6 +552,26 @@ reg('s-nuts', 'Juostaanko Karhunkierros lumessa', ['karhunkierros'], () => {
   svg.append('g').attr('transform', `translate(0,${h - mb})`)
      .call(d3.axisBottom(x).tickValues([1, 5, 10, 15, 20, 25, 31]).tickFormat(d => d + '.5.'))
      .call(g => { g.select('.domain').attr('stroke', css('--rule')); g.selectAll('text').attr('fill', css('--ink-3')); });
+  // Kisapäivät. Ensimmäinen NUTS Karhunkierros oli yksipäiväinen 80 km:n kisa la 18.5.2013;
+  // nykyään kaksipäiväinen viikonloppu, 2026 se on 22.–23.5. Merkit ennen käyriä, jotta data jää päälle.
+  const KISAT = [{ a: 18, b: 18, nimi: 'ensimmäinen kisa', pvm: '18.5.2013', anchor: 'end' },
+                 { a: 22, b: 23, nimi: 'kisaviikonloppu', pvm: '22.–23.5.2026', anchor: 'start' }];
+  const merkit = svg.append('g').attr('pointer-events', 'none');
+  for (const k of KISAT) {
+    if (k.b > k.a) merkit.append('rect').attr('x', x(k.a)).attr('width', x(k.b) - x(k.a))
+       .attr('y', mt).attr('height', h - mb - mt).attr('fill', css('--ink-3')).attr('opacity', .12);
+    for (const pv of (k.b > k.a ? [k.a, k.b] : [k.a]))
+      merkit.append('line').attr('x1', x(pv)).attr('x2', x(pv)).attr('y1', mt).attr('y2', h - mb)
+         .attr('stroke', css('--ink-3')).attr('stroke-width', 1.5).attr('stroke-dasharray', '4 3');
+    // Kapealla naytolla oikeanpuoleinen selite ei mahdu viivan oikealle; se kaantyy vasemmalle.
+    const LEV = 86;
+    let anchor = k.anchor, tx = anchor === 'end' ? x(k.a) - 5 : x(k.b) + 5, rivi = 0;
+    if (anchor === 'start' && tx + LEV > wid - mr) { anchor = 'end'; tx = x(k.a) - 5; rivi = 28; }
+    const t = merkit.append('text').attr('x', tx).attr('y', mt + 11 + rivi).attr('text-anchor', anchor)
+       .attr('fill', css('--ink-3')).attr('font-size', 11);
+    t.append('tspan').text(k.nimi);
+    t.append('tspan').attr('x', tx).attr('dy', 13).attr('font-weight', 600).text(k.pvm);
+  }
   for (const [key, col] of [['lunta', '--s1'], ['yli10', '--s2']])
     svg.append('path').datum(paivat).attr('fill', 'none').attr('stroke', css(col)).attr('stroke-width', 2.5)
        .attr('d', d3.line().x(p => x(p.pv)).y(p => y(p[key])).curve(d3.curveMonotoneX));
@@ -561,25 +582,35 @@ reg('s-nuts', 'Juostaanko Karhunkierros lumessa', ['karhunkierros'], () => {
         `<br>yli 10 cm ${Math.round(100 * p.yli10)} %<br><span class="k">keskisyvyys ${num(p.ka)} cm` +
         `, ${p.n} vuotta</span>`, ev))
      .on('mouseleave', hideTip);
-  legend('#nuts-legend', [['lunta maassa', css('--s1')], ['yli 10 cm', css('--s2')]]);
+  legend('#nuts-legend', [['lunta maassa', css('--s1')], ['yli 10 cm', css('--s2')],
+                         ['kisapäivä', css('--ink-3')]]);
 
   const at = pv => paivat.find(p => p.pv === pv);
+  const osuus = pv => Math.round(100 * at(pv).lunta);
   const myohaiset = [...new Set(rows.filter(r => r.pv >= 25 && r.cm > 0).map(r => r.vuosi))].sort();
   d3.select('#nuts-note').html(
-    `<b>Toukokuun lopulla lunta ei käytännössä ole.</b> Kiutaköngäällä 25. toukokuuta lunta on ollut
-     ${Math.round(100 * at(25).lunta)} % vuosista, ja koko jaksolla 1990–2026 lunta on mitattu
+    `<b>Molemmat kisapäivät osuvat sulaan maahan.</b> Ensimmäinen NUTS Karhunkierros juostiin
+     80 kilometrin matkana lauantaina <b>18.5.2013</b>; vuonna 2026 kisa on <b>22.–23.5.</b>
+     Kiutaköngäällä lunta on ollut 18. toukokuuta ${osuus(18)} % vuosista ja 22. päivänä
+     ${osuus(22)} % — yli kymmenen senttiä ${Math.round(100 * at(18).yli10)} % ja
+     ${Math.round(100 * at(22).yli10)} %.
+     <br><br><b>Ensimmäinen kisa ei ollut kahta viikkoa aiemmin vaan neljä päivää.</b>
+     Kisaviikonloppu on vaeltanut vuosittain helluntain mukana: 2013 se oli 18.5., 2015 22.–23.5.,
+     2016 27.–28.5., 2023 26.–27.5., 2024 24.–25.5., 2026 22.–23.5. ja 2027 28.–29.5.
+     Ero ensimmäisen ja nykyisen välillä on siis päiviä, ei viikkoja, eikä lumitilanne juuri muutu.
+     Kahden viikon siirto taaksepäin olisi toinen kisa: 4. toukokuuta lunta on ollut
+     ${osuus(4)} % vuosista ja 8. päivänä ${osuus(8)} %.
+     <br><br><b>Toukokuun lopulla lunta ei käytännössä ole.</b> Kiutaköngäällä 25. toukokuuta lunta on ollut
+     ${osuus(25)} % vuosista, ja koko jaksolla 1990–2026 lunta on mitattu
      25. päivän jälkeen vain ${myohaiset.length} kertaa: ${myohaiset.join(', ')} — ja silloinkin 1–2 cm.
      Viimeksi siis ennen vuosituhannen vaihdetta.
-     <br><br><b>Kaksi viikkoa aiemmin tilanne on toinen.</b> 10. toukokuuta lunta on ollut
-     ${Math.round(100 * at(10).lunta)} % vuosista ja yli kymmenen senttiä ${Math.round(100 * at(10).yli10)} %;
-     15. päivänä ${Math.round(100 * at(15).lunta)} % ja ${Math.round(100 * at(15).yli10)} %.
-     Ensimmäinen kisa ajoittui siis selvästi epävarmempaan kohtaan kuin nykyinen.
      <br><br><b>Sulaminen on aikaistunut.</b> Viimeinen lumipäivä oli 1990-luvulla keskimäärin
      20. toukokuuta, 2000-luvulla 12. ja 2010-luvulla 9. päivä.
      <br><br><b>Asema ei ole reitti.</b> Kiutaköngäs on Oulankajoen laaksossa noin 160 metrissä,
      ja mittaus tehdään aukealta. Karhunkierros nousee vaaroille ja kulkee pohjoisrinteiden
      kuusikoissa, joissa kinokset säilyvät viikkoja pidempään. Nämä luvut ovat siis alaraja:
-     “ei lunta asemalla” ei tarkoita “ei hankea polulla”.`);
+     “ei lunta asemalla” ei tarkoita “ei hankea polulla”. Vuoden 2013 kisaraportissa Rukalla
+     mitattiin 24 astetta lämpöä ja polulla oli silti lunta ja jäätä.`);
 });
 
 reg('s-paratiisi', 'Suomen paratiisi', ['paratiisi'], () => {
